@@ -1,17 +1,18 @@
 // ============================================================
-//  ESP32-S3 - USB HID study with ST7789 TFT (VERTICAL layout)
+//  ESP32-S3 - USB HID study with ST7789 TFT (VERTICAL)
+//  Scripts stored in files (LittleFS) + menu driven by BOOT
 // ------------------------------------------------------------
-//  Same project as esp32-usb-hid, but with the display in
-//  PORTRAIT orientation (170 wide x 320 tall). Terminal theme,
-//  English UI. Press BOOT (GPIO0) to "type" the script.
+//  Portrait layout (170x320). The board acts as a USB KEYBOARD
+//  over the native USB port. Script files (.txt) live in the
+//  internal flash (LittleFS); example files are created on the
+//  first boot, so it works without any upload tool.
+//
+//  Navigation with the single BOOT button (GPIO0):
+//     MENU     click = next file   double = previous   hold = open
+//     PREVIEW  click = back        hold = send (type the script)
 //
 //  Script commands (one per line):
-//     STRING <text>    type the text
-//     ENTER            Enter key
-//     TAB              Tab key
-//     DELAY <ms>       wait X milliseconds
-//     GUI <key>        Windows/Cmd + key   (e.g. GUI r)
-//     #comment         ignored line
+//     STRING <text> / ENTER / TAB / DELAY <ms> / GUI <key> / #comment
 //
 //  Arduino IDE options (Tools):
 //     USB Mode        = "USB-OTG (TinyUSB)"
@@ -22,6 +23,7 @@
 #include <Adafruit_ST7789.h>
 #include <Fonts/FreeMono9pt7b.h>
 #include <SPI.h>
+#include <LittleFS.h>
 #include "USB.h"
 #include "USBHIDKeyboard.h"
 
@@ -34,48 +36,89 @@
 #define TFT_BLK   7
 
 // ---------- Button ----------
-#define BOTAO 0   // on-board BOOT button
-
-// ---------- Margins ----------
+#define BOTAO 0
 #define MARGEM_X 12
 #define MARGEM_Y 12
+
+// ---------- Button gesture timing ----------
+#define LONG_MS   700
+#define DOUBLE_MS 350
+#define DEBOUNCE  25
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 USBHIDKeyboard teclado;
 
-// ---------- Terminal theme colors (set in setup) ----------
-uint16_t COR_FUNDO;
-uint16_t COR_VERDE;
-uint16_t COR_VERDE2;
-uint16_t COR_BORDA;
-uint16_t COR_AMBAR;
-uint16_t COR_CIANO;
+uint16_t COR_FUNDO, COR_VERDE, COR_VERDE2, COR_BORDA, COR_AMBAR, COR_CIANO;
 
 int enviados = 0;
 
-// ---- Preview pagination ----
+// ---------- Files ----------
+#define MAX_ARQ 16
+String arquivos[MAX_ARQ];
+int totalArq = 0;
+int selecionado = 0;
+String scriptAtual = "";
+
+enum Tela { MENU, PREVIEW };
+Tela estado = MENU;
+
+// ---------- Preview pagination ----------
 #define MAX_LINHAS 48
 String linhas[MAX_LINHAS];
 int totalLinhas = 0;
 int totalPaginas = 1;
 int paginaAtual = 0;
-const int LINHAS_POR_PAGINA = 10;              // the portrait area fits more lines
+const int LINHAS_POR_PAGINA = 10;
 const unsigned long INTERVALO_PAGINA = 3000;
 unsigned long ultimaTroca = 0;
 
-const char* script =
-  "DELAY 500\n"
-  "STRING Hello! This is a longer demo payload used to test the automatic pagination on the small ST7789 screen.\n"
-  "ENTER\n"
-  "STRING When the text does not fit, the display cycles through the pages by itself.\n";
+// ============================================================
+//  FILES (LittleFS)
+// ============================================================
+
+void escreverArquivo(const char* path, const char* conteudo) {
+  File f = LittleFS.open(path, "w");
+  if (f) { f.print(conteudo); f.close(); }
+}
+
+void seedDefaults() {
+  escreverArquivo("/payload1.txt",
+    "DELAY 500\n"
+    "STRING Hello from file 1! A longer demo text to show the pagination feature on the ST7789 screen.\n"
+    "ENTER\n"
+    "STRING Loaded from LittleFS.\n");
+  escreverArquivo("/payload2.txt",
+    "DELAY 300\n"
+    "STRING Second script, loaded from its own file.\n"
+    "ENTER\n");
+}
+
+void listarArquivos() {
+  totalArq = 0;
+  File root = LittleFS.open("/");
+  if (!root) return;
+  File file = root.openNextFile();
+  while (file && totalArq < MAX_ARQ) {
+    String n = String(file.name());
+    int bar = n.lastIndexOf('/');
+    if (bar >= 0) n = n.substring(bar + 1);
+    if (n.endsWith(".txt")) arquivos[totalArq++] = n;
+    file = root.openNextFile();
+  }
+}
+
+String nomeExibicao(int i) {
+  String n = arquivos[i];
+  if (n.endsWith(".txt")) n = n.substring(0, n.length() - 4);
+  return n;
+}
 
 // ============================================================
-//  DISPLAY
+//  SCRIPT PARSING / PREVIEW
 // ============================================================
 
 String montarPreview(const char* texto) {
-  String preview = "";
-  String linha = "";
+  String preview = "", linha = "";
   for (int i = 0; ; i++) {
     char c = texto[i];
     if (c == '\n' || c == '\0') {
@@ -86,136 +129,48 @@ String montarPreview(const char* texto) {
       }
       linha = "";
       if (c == '\0') break;
-    } else {
-      linha += c;
-    }
+    } else linha += c;
   }
   return preview;
 }
 
-// Word-wrap the preview into the global linhas[] array and count pages
 void quebrarEmLinhas(const String &txt, int maxChars) {
   String word = "", line = "";
   totalLinhas = 0;
   for (unsigned int i = 0; i <= txt.length(); i++) {
     char c = (i < txt.length()) ? txt[i] : ' ';
     if (c == ' ') {
-      if (line.length() == 0) {
-        line = word;
-      } else if (line.length() + 1 + word.length() <= (unsigned)maxChars) {
-        line += " " + word;
-      } else {
-        if (totalLinhas < MAX_LINHAS) linhas[totalLinhas++] = line;
-        line = word;
-      }
+      if (line.length() == 0) line = word;
+      else if (line.length() + 1 + word.length() <= (unsigned)maxChars) line += " " + word;
+      else { if (totalLinhas < MAX_LINHAS) linhas[totalLinhas++] = line; line = word; }
       word = "";
-    } else {
-      word += c;
-    }
+    } else word += c;
   }
   if (line.length() > 0 && totalLinhas < MAX_LINHAS) linhas[totalLinhas++] = line;
   totalPaginas = (totalLinhas + LINHAS_POR_PAGINA - 1) / LINHAS_POR_PAGINA;
   if (totalPaginas < 1) totalPaginas = 1;
 }
 
-// Draw one page of the preview in the payload area
-void desenharPagina(int p) {
-  tft.fillRect(6, 26, 158, 222, COR_FUNDO);  // clear only the payload area
-
-  // Page indicator (only when there is more than one page)
-  tft.setFont();
-  tft.setTextSize(1);
-  if (totalPaginas > 1) {
-    tft.fillRect(116, 252, 48, 10, COR_FUNDO);
-    tft.setTextColor(COR_VERDE);
-    char pg[12];
-    snprintf(pg, sizeof(pg), "pg %d/%d", p + 1, totalPaginas);
-    tft.setCursor(116, 258);
-    tft.print(pg);
-  }
-
-  // Lines of this page (FreeMono)
-  tft.setFont(&FreeMono9pt7b);
-  tft.setTextColor(COR_VERDE2);
-  int y = 44;
-  int start = p * LINHAS_POR_PAGINA;
-  int drawn = 0;
-  for (int i = start; i < totalLinhas && drawn < LINHAS_POR_PAGINA; i++, drawn++) {
-    tft.setCursor(MARGEM_X, y);
-    tft.print(linhas[i]);
-    y += 18;
-  }
-  tft.setFont();
-
-  // Cursor block only on the last page
-  if (p == totalPaginas - 1) tft.fillRect(MARGEM_X, y - 14, 11, 15, COR_VERDE);
+void abrirArquivo(int i) {
+  scriptAtual = "";
+  File f = LittleFS.open("/" + arquivos[i], "r");
+  if (f) { while (f.available()) scriptAtual += (char)f.read(); f.close(); }
+  quebrarEmLinhas(montarPreview(scriptAtual.c_str()), 13);
+  paginaAtual = 0;
 }
-
-void desenharBase() {
-  tft.fillScreen(COR_FUNDO);
-  tft.setFont();
-
-  // Frame (portrait 170x320)
-  tft.drawRect(4, 4, 162, 312, COR_BORDA);
-
-  // Header / prompt (counter is drawn by desenharEstado, top-right)
-  tft.setTextSize(1);
-  tft.setTextColor(COR_VERDE);
-  tft.setCursor(MARGEM_X, MARGEM_Y);
-  tft.print("esp32@hid:~$");
-
-  // Divider + BOOT hint
-  tft.drawFastHLine(MARGEM_X, 250, 170 - 2 * MARGEM_X, COR_BORDA);
-  tft.setTextColor(COR_VERDE);
-  tft.setCursor(MARGEM_X, 258);
-  tft.print("press [BOOT]");
-  tft.setCursor(MARGEM_X, 270);
-  tft.print("to send");
-
-  // First page of the payload
-  desenharPagina(paginaAtual);
-}
-
-void desenharEstado(const char* texto, uint16_t cor) {
-  // Status text (bottom)
-  tft.fillRect(6, 286, 158, 26, COR_FUNDO);  // clear status strip only
-  tft.setTextSize(2);
-  tft.setTextColor(cor);
-  tft.setCursor(MARGEM_X, 290);
-  tft.print(texto);
-
-  // Send counter (top-right, away from the status text)
-  tft.fillRect(104, 10, 58, 10, COR_FUNDO);
-  tft.setTextSize(1);
-  tft.setTextColor(COR_VERDE2);
-  char buf[16];
-  snprintf(buf, sizeof(buf), "sent:%d", enviados);
-  tft.setCursor(104, MARGEM_Y);
-  tft.print(buf);
-}
-
-// ============================================================
-//  SCRIPT (keyboard)
-// ============================================================
 
 void executarLinha(String linha) {
   linha.trim();
   if (linha.length() == 0 || linha.startsWith("#")) return;
-
   int esp = linha.indexOf(' ');
   String cmd = (esp == -1) ? linha : linha.substring(0, esp);
   String arg = (esp == -1) ? ""    : linha.substring(esp + 1);
   cmd.toUpperCase();
-
-  if (cmd == "STRING") {
-    teclado.print(arg);
-  } else if (cmd == "ENTER") {
-    teclado.write(KEY_RETURN);
-  } else if (cmd == "TAB") {
-    teclado.write(KEY_TAB);
-  } else if (cmd == "DELAY") {
-    delay(arg.toInt());
-  } else if (cmd == "GUI") {
+  if (cmd == "STRING")      teclado.print(arg);
+  else if (cmd == "ENTER")  teclado.write(KEY_RETURN);
+  else if (cmd == "TAB")    teclado.write(KEY_TAB);
+  else if (cmd == "DELAY")  delay(arg.toInt());
+  else if (cmd == "GUI") {
     teclado.press(KEY_LEFT_GUI);
     if (arg.length() > 0) teclado.press(arg[0]);
     delay(100);
@@ -234,18 +189,154 @@ void rodarScript(const char* texto) {
 }
 
 // ============================================================
+//  BUTTON GESTURES (single / double / long) - non-blocking
+//  returns: 0 none, 1 click, 2 double, 3 long
+// ============================================================
+
+int lerBotao() {
+  static bool pressed = false;
+  static unsigned long tDown = 0, tUp = 0;
+  static int clicks = 0;
+  static bool longFired = false;
+  unsigned long now = millis();
+  bool nivel = (digitalRead(BOTAO) == LOW);
+
+  if (nivel && !pressed) { pressed = true; tDown = now; longFired = false; }
+
+  if (nivel && pressed && !longFired && (now - tDown >= LONG_MS)) {
+    longFired = true; clicks = 0;
+    return 3;
+  }
+
+  if (!nivel && pressed) {
+    pressed = false; tUp = now;
+    if (!longFired && (now - tDown >= DEBOUNCE)) clicks++;
+  }
+
+  if (!nivel && clicks > 0 && (now - tUp >= DOUBLE_MS)) {
+    int c = clicks; clicks = 0;
+    return (c >= 2) ? 2 : 1;
+  }
+  return 0;
+}
+
+// ============================================================
+//  DISPLAY
+// ============================================================
+
+void desenharMenu() {
+  tft.fillScreen(COR_FUNDO);
+  tft.setFont();
+  tft.drawRect(4, 4, 162, 312, COR_BORDA);
+
+  tft.setTextSize(1);
+  tft.setTextColor(COR_VERDE);
+  tft.setCursor(MARGEM_X, MARGEM_Y);
+  tft.print("esp32@hid:~$ ls");
+
+  tft.setTextSize(2);
+  int y = 40;
+  for (int i = 0; i < totalArq && i < 6; i++) {
+    if (i == selecionado) {
+      tft.fillRect(6, y - 2, 152, 22, COR_BORDA);
+      tft.setTextColor(COR_VERDE);
+    } else {
+      tft.setTextColor(COR_VERDE2);
+    }
+    tft.setCursor(MARGEM_X, y);
+    tft.print(i == selecionado ? "> " : "  ");
+    tft.print(nomeExibicao(i));
+    y += 28;
+  }
+
+  tft.drawFastHLine(MARGEM_X, 250, 170 - 2 * MARGEM_X, COR_BORDA);
+  tft.setTextSize(1);
+  tft.setTextColor(COR_VERDE);
+  tft.setCursor(MARGEM_X, 258);
+  tft.print("click:next");
+  tft.setCursor(MARGEM_X, 270);
+  tft.print("2x:prev  hold:open");
+}
+
+void desenharPagina(int p) {
+  tft.fillRect(6, 26, 158, 222, COR_FUNDO);
+
+  tft.setFont();
+  tft.setTextSize(1);
+  if (totalPaginas > 1) {
+    tft.fillRect(116, 252, 48, 10, COR_FUNDO);
+    tft.setTextColor(COR_VERDE);
+    char pg[12];
+    snprintf(pg, sizeof(pg), "pg %d/%d", p + 1, totalPaginas);
+    tft.setCursor(116, 258);
+    tft.print(pg);
+  }
+
+  tft.setFont(&FreeMono9pt7b);
+  tft.setTextColor(COR_VERDE2);
+  int y = 44;
+  int start = p * LINHAS_POR_PAGINA;
+  int drawn = 0;
+  for (int i = start; i < totalLinhas && drawn < LINHAS_POR_PAGINA; i++, drawn++) {
+    tft.setCursor(MARGEM_X, y);
+    tft.print(linhas[i]);
+    y += 18;
+  }
+  tft.setFont();
+  if (p == totalPaginas - 1) tft.fillRect(MARGEM_X, y - 14, 11, 15, COR_VERDE);
+}
+
+void desenharEstado(const char* texto, uint16_t cor) {
+  tft.fillRect(6, 286, 158, 26, COR_FUNDO);
+  tft.setFont();
+  tft.setTextSize(2);
+  tft.setTextColor(cor);
+  tft.setCursor(MARGEM_X, 290);
+  tft.print(texto);
+
+  tft.fillRect(104, 10, 58, 10, COR_FUNDO);
+  tft.setTextSize(1);
+  tft.setTextColor(COR_VERDE2);
+  char buf[16];
+  snprintf(buf, sizeof(buf), "sent:%d", enviados);
+  tft.setCursor(104, MARGEM_Y);
+  tft.print(buf);
+}
+
+void desenharPreview() {
+  tft.fillScreen(COR_FUNDO);
+  tft.setFont();
+  tft.drawRect(4, 4, 162, 312, COR_BORDA);
+
+  tft.setTextSize(1);
+  tft.setTextColor(COR_VERDE);
+  tft.setCursor(MARGEM_X, MARGEM_Y);
+  tft.print("cat ");
+  tft.print(nomeExibicao(selecionado));
+
+  tft.drawFastHLine(MARGEM_X, 250, 170 - 2 * MARGEM_X, COR_BORDA);
+  tft.setTextColor(COR_VERDE);
+  tft.setCursor(MARGEM_X, 258);
+  tft.print("click:back");
+  tft.setCursor(MARGEM_X, 270);
+  tft.print("hold:send");
+
+  desenharPagina(paginaAtual);
+  desenharEstado("[ READY ]", COR_VERDE);
+}
+
+// ============================================================
 //  SETUP / LOOP
 // ============================================================
 
 void setup() {
   pinMode(BOTAO, INPUT_PULLUP);
-
   pinMode(TFT_BLK, OUTPUT);
   digitalWrite(TFT_BLK, HIGH);
 
   SPI.begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
   tft.init(170, 320);
-  tft.setRotation(0);   // portrait 170x320
+  tft.setRotation(0);
 
   COR_FUNDO  = ST77XX_BLACK;
   COR_VERDE  = tft.color565(61, 255, 106);
@@ -254,33 +345,47 @@ void setup() {
   COR_AMBAR  = tft.color565(255, 210, 61);
   COR_CIANO  = tft.color565(77, 240, 255);
 
-  quebrarEmLinhas(montarPreview(script), 13);  // 13 chars per line (narrow)
-  ultimaTroca = millis();
+  LittleFS.begin(true);
+  listarArquivos();
+  if (totalArq == 0) { seedDefaults(); listarArquivos(); }
 
-  desenharBase();
-  desenharEstado("[ READY ]", COR_VERDE);
+  estado = MENU;
+  selecionado = 0;
+  desenharMenu();
 
   teclado.begin();
   USB.begin();
 }
 
 void loop() {
-  // Auto-advance the preview pages on a timer (only if text overflows)
-  if (totalPaginas > 1 && millis() - ultimaTroca >= INTERVALO_PAGINA) {
-    ultimaTroca = millis();
-    paginaAtual = (paginaAtual + 1) % totalPaginas;
-    desenharPagina(paginaAtual);
-  }
+  int gesto = lerBotao();
 
-  if (digitalRead(BOTAO) == LOW) {
-    delay(50);  // debounce
-
-    desenharEstado("[ SEND ]", COR_AMBAR);
-    rodarScript(script);
-    enviados++;
-
-    desenharEstado("[ SENT ]", COR_CIANO);
-    delay(1200);
-    desenharEstado("[ READY ]", COR_VERDE);
+  if (estado == MENU) {
+    if (totalArq == 0) return;
+    if (gesto == 1) { selecionado = (selecionado + 1) % totalArq; desenharMenu(); }
+    else if (gesto == 2) { selecionado = (selecionado - 1 + totalArq) % totalArq; desenharMenu(); }
+    else if (gesto == 3) {
+      abrirArquivo(selecionado);
+      estado = PREVIEW;
+      ultimaTroca = millis();
+      desenharPreview();
+    }
+  } else {  // PREVIEW
+    if (totalPaginas > 1 && millis() - ultimaTroca >= INTERVALO_PAGINA) {
+      ultimaTroca = millis();
+      paginaAtual = (paginaAtual + 1) % totalPaginas;
+      desenharPagina(paginaAtual);
+    }
+    if (gesto == 1 || gesto == 2) {
+      estado = MENU;
+      desenharMenu();
+    } else if (gesto == 3) {
+      desenharEstado("[ SENDING ]", COR_AMBAR);
+      rodarScript(scriptAtual.c_str());
+      enviados++;
+      desenharEstado("[ SENT ]", COR_CIANO);
+      delay(1200);
+      desenharEstado("[ READY ]", COR_VERDE);
+    }
   }
 }

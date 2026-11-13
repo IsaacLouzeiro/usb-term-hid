@@ -1,9 +1,10 @@
 # ESP32-S3 USB HID + Tela ST7789
 
 Projeto de estudo: um **ESP32-S3** que se conecta ao computador pela porta
-USB nativa e se passa por um **teclado** (USB HID). Ao apertar o botão **BOOT**,
-ele "digita" um script de comandos. Uma tela **TFT ST7789 de 1.9"** mostra o
-texto que será enviado e o estado atual (pronto / enviando / enviado).
+USB nativa e se passa por um **teclado** (USB HID). Os scripts ficam em
+**arquivos** na memória interna (LittleFS) e são escolhidos por um **menu na
+tela**, navegado só pelo botão **BOOT**. Uma tela **TFT ST7789 de 1.9"** mostra
+o menu, a prévia do texto (com paginação automática) e o estado atual.
 
 > ⚠️ **Uso educacional.** Teste apenas em computadores seus ou com autorização.
 > A emulação de teclado via USB deve ser usada de forma responsável.
@@ -45,9 +46,16 @@ O botão de disparo é o **BOOT** da própria placa (GPIO 0).
 Grave pela porta UART e conecte o cabo também na porta USB nativa, que é por
 onde a placa vira teclado.
 
-## Comandos do script
+## Scripts em arquivos (LittleFS)
 
-O script fica na variável `script` dentro do `.ino`. Um comando por linha:
+Os scripts ficam em arquivos `.txt` na memória interna da placa. No **primeiro
+boot**, se não houver nenhum, a placa cria dois exemplos (`payload1.txt` e
+`payload2.txt`) automaticamente — então funciona sem ferramenta de upload.
+
+Para usar seus próprios scripts, coloque arquivos `.txt` na raiz do LittleFS
+(pela ferramenta "LittleFS Data Upload" ou, mais pra frente, por Wi-Fi).
+
+Cada arquivo tem um comando por linha:
 
 | Comando        | O que faz                          |
 |----------------|------------------------------------|
@@ -57,6 +65,15 @@ O script fica na variável `script` dentro do `.ino`. Um comando por linha:
 | `DELAY 500`    | espera 500 ms                      |
 | `GUI r`        | tecla Windows/Cmd + r              |
 | `# ...`        | comentário (ignorado)              |
+
+## Navegação pelo botão BOOT
+
+Um único botão controla tudo, pelo tempo e número de toques:
+
+| Tela      | Clique        | Duplo clique   | Segurar (~0,7s) |
+|-----------|---------------|----------------|-----------------|
+| Menu      | próximo arquivo | arquivo anterior | abrir o selecionado |
+| Prévia    | voltar ao menu  | voltar ao menu   | enviar (digitar) |
 
 ## Layouts disponíveis
 
@@ -70,11 +87,13 @@ preferir:
 
 1. Abra `esp32-usb-hid/esp32-usb-hid.ino` (ou a pasta `-vertical`) no Arduino IDE.
 2. Ajuste as opções de `Tools` acima e grave na placa.
-3. Clique num editor de texto no PC para deixar o cursor ativo.
-4. Aperte o botão **BOOT**. O texto da tela será digitado.
+3. No menu da tela, use o **BOOT** para escolher o arquivo (clique/duplo) e
+   segure para abrir.
+4. Na prévia, clique num editor de texto no PC e **segure o BOOT** para enviar.
 
 ## Próximos passos
 
-- [ ] Carregar scripts de arquivos na memória interna (LittleFS)
+- [x] Carregar scripts de arquivos na memória interna (LittleFS)
+- [x] Menu na tela navegado pelo botão BOOT
 - [ ] Enviar arquivos pelo Wi-Fi via página web
 - [ ] Modo pen drive (USB MSC) para arrastar scripts
