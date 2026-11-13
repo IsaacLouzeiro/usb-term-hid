@@ -45,7 +45,7 @@ USBHIDKeyboard teclado;
 uint16_t COR_FUNDO;     // background
 uint16_t COR_VERDE;     // bright green (prompt / ready)
 uint16_t COR_VERDE2;    // soft green (output text)
-uint16_t COR_BARRA;     // status bar background
+uint16_t COR_BORDA;     // frame / divider green
 uint16_t COR_AMBAR;     // amber (sending)
 uint16_t COR_CIANO;     // cyan (sent)
 
@@ -83,39 +83,69 @@ String montarPreview(const char* texto) {
   return preview;
 }
 
-void desenharBase() {
-  tft.fillScreen(COR_FUNDO);
+// Inner margins so text is not glued to the edges
+#define MARGEM_X  12
+#define MARGEM_Y  12
 
-  // Prompt line
-  tft.setTextSize(1);
-  tft.setTextColor(COR_VERDE);
-  tft.setCursor(8, 10);
-  tft.print("esp32@hid:~$ send");
-
-  // Output label
-  tft.setTextColor(COR_VERDE2);
-  tft.setCursor(8, 30);
-  tft.print("> payload:");
-
-  // Preview text (wrapped)
-  tft.setTextWrap(true);
-  tft.setCursor(8, 48);
-  tft.print(montarPreview(script));
-  tft.setTextWrap(false);
-
-  // Cursor block just below the text
-  int cy = tft.getCursorY() + 14;
-  if (cy > 120) cy = 120;
-  tft.fillRect(8, cy, 9, 12, COR_VERDE);
+// Word-wrap "txt" inside a column of maxChars, returns the Y below the text
+int printWrapped(const String &txt, int x, int y, int maxChars, int lineH) {
+  String word = "", line = "";
+  int cy = y;
+  for (unsigned int i = 0; i <= txt.length(); i++) {
+    char c = (i < txt.length()) ? txt[i] : ' ';
+    if (c == ' ') {
+      if (line.length() == 0) {
+        line = word;
+      } else if (line.length() + 1 + word.length() <= (unsigned)maxChars) {
+        line += " " + word;
+      } else {
+        tft.setCursor(x, cy); tft.print(line);
+        cy += lineH; line = word;
+      }
+      word = "";
+    } else {
+      word += c;
+    }
+  }
+  if (line.length() > 0) { tft.setCursor(x, cy); tft.print(line); cy += lineH; }
+  return cy;
 }
 
-// Redraw only the status bar at the bottom
+void desenharBase() {
+  tft.fillScreen(COR_FUNDO);                 // pure black
+
+  // Thin terminal frame (gives the border spacing)
+  tft.drawRect(4, 4, 312, 162, COR_BORDA);
+
+  // Header / prompt line (small)
+  tft.setTextSize(1);
+  tft.setTextColor(COR_VERDE);
+  tft.setCursor(MARGEM_X, MARGEM_Y);
+  tft.print("esp32@hid:~$ send");
+
+  // Payload text (bigger, size 2, wrapped with margins)
+  tft.setTextSize(2);
+  tft.setTextColor(COR_VERDE2);
+  int endY = printWrapped(montarPreview(script), MARGEM_X, 32, 23, 20);
+
+  // Cursor block right after the text
+  tft.fillRect(MARGEM_X, endY + 2, 12, 16, COR_VERDE);
+
+  // Divider + BOOT hint (identifies the action button)
+  tft.drawFastHLine(MARGEM_X, 116, 320 - 2 * MARGEM_X, COR_BORDA);
+  tft.setTextSize(1);
+  tft.setTextColor(COR_VERDE);
+  tft.setCursor(MARGEM_X, 124);
+  tft.print("press [BOOT] to send");
+}
+
+// Redraw only the status line at the bottom (keeps the black background)
 void desenharEstado(const char* texto, uint16_t cor) {
-  tft.fillRect(0, 138, 320, 32, COR_BARRA);
+  tft.fillRect(6, 136, 304, 26, COR_FUNDO);  // clear only this strip
 
   tft.setTextSize(2);
   tft.setTextColor(cor);
-  tft.setCursor(8, 146);
+  tft.setCursor(MARGEM_X, 140);
   tft.print(texto);
 
   // Send counter on the right
@@ -123,7 +153,7 @@ void desenharEstado(const char* texto, uint16_t cor) {
   tft.setTextColor(COR_VERDE2);
   char buf[16];
   snprintf(buf, sizeof(buf), "sent:%d", enviados);
-  tft.setCursor(258, 150);
+  tft.setCursor(250, 146);
   tft.print(buf);
 }
 
@@ -181,10 +211,10 @@ void setup() {
   tft.setRotation(1);   // landscape 320x170
 
   // Build theme colors
-  COR_FUNDO  = tft.color565(5, 8, 5);
+  COR_FUNDO  = ST77XX_BLACK;                  // pure black
   COR_VERDE  = tft.color565(61, 255, 106);
   COR_VERDE2 = tft.color565(140, 255, 169);
-  COR_BARRA  = tft.color565(11, 22, 12);
+  COR_BORDA  = tft.color565(26, 90, 40);
   COR_AMBAR  = tft.color565(255, 210, 61);
   COR_CIANO  = tft.color565(77, 240, 255);
 
