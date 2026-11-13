@@ -52,6 +52,16 @@ uint16_t COR_CIANO;     // cyan (sent)
 
 int enviados = 0;       // send counter
 
+// ---- Preview pagination ----
+#define MAX_LINHAS 48
+String linhas[MAX_LINHAS];                     // wrapped preview lines
+int totalLinhas = 0;
+int totalPaginas = 1;
+int paginaAtual = 0;
+const int LINHAS_POR_PAGINA = 3;               // lines that fit the payload area
+const unsigned long INTERVALO_PAGINA = 3000;   // ms between pages
+unsigned long ultimaTroca = 0;
+
 // ---- Command "file" (embedded in code for now) ----
 const char* script =
   "DELAY 500\n"
@@ -88,10 +98,10 @@ String montarPreview(const char* texto) {
 #define MARGEM_X  12
 #define MARGEM_Y  12
 
-// Word-wrap "txt" inside a column of maxChars, returns the Y below the text
-int printWrapped(const String &txt, int x, int y, int maxChars, int lineH) {
+// Word-wrap the preview into the global linhas[] array and count pages
+void quebrarEmLinhas(const String &txt, int maxChars) {
   String word = "", line = "";
-  int cy = y;
+  totalLinhas = 0;
   for (unsigned int i = 0; i <= txt.length(); i++) {
     char c = (i < txt.length()) ? txt[i] : ' ';
     if (c == ' ') {
@@ -100,16 +110,50 @@ int printWrapped(const String &txt, int x, int y, int maxChars, int lineH) {
       } else if (line.length() + 1 + word.length() <= (unsigned)maxChars) {
         line += " " + word;
       } else {
-        tft.setCursor(x, cy); tft.print(line);
-        cy += lineH; line = word;
+        if (totalLinhas < MAX_LINHAS) linhas[totalLinhas++] = line;
+        line = word;
       }
       word = "";
     } else {
       word += c;
     }
   }
-  if (line.length() > 0) { tft.setCursor(x, cy); tft.print(line); cy += lineH; }
-  return cy;
+  if (line.length() > 0 && totalLinhas < MAX_LINHAS) linhas[totalLinhas++] = line;
+  totalPaginas = (totalLinhas + LINHAS_POR_PAGINA - 1) / LINHAS_POR_PAGINA;
+  if (totalPaginas < 1) totalPaginas = 1;
+}
+
+// Draw one page of the preview in the payload area
+void desenharPagina(int p) {
+  tft.fillRect(6, 26, 308, 78, COR_FUNDO);   // clear only the payload area
+
+  // Page indicator (only when there is more than one page)
+  tft.setFont();
+  tft.setTextSize(1);
+  if (totalPaginas > 1) {
+    tft.fillRect(246, 10, 66, 10, COR_FUNDO);
+    tft.setTextColor(COR_VERDE);
+    char pg[12];
+    snprintf(pg, sizeof(pg), "pg %d/%d", p + 1, totalPaginas);
+    tft.setCursor(250, MARGEM_Y);
+    tft.print(pg);
+  }
+
+  // Lines of this page (FreeMono)
+  tft.setFont(&FreeMono9pt7b);
+  tft.setTextColor(COR_VERDE2);
+  int y = 42;
+  int start = p * LINHAS_POR_PAGINA;
+  int drawn = 0;
+  for (int i = start; i < totalLinhas && drawn < LINHAS_POR_PAGINA; i++, drawn++) {
+    tft.setCursor(MARGEM_X, y);
+    tft.print(linhas[i]);
+    y += 18;
+  }
+  tft.setFont();
+
+  // Cursor block only on the last page
+  if (p == totalPaginas - 1) tft.fillRect(MARGEM_X, y - 14, 11, 15, COR_VERDE);
 }
 
 void desenharBase() {
@@ -125,21 +169,14 @@ void desenharBase() {
   tft.setCursor(MARGEM_X, MARGEM_Y);
   tft.print("esp32@hid:~$ send");
 
-  // Payload text (FreeMono: a bit smaller, true terminal look)
-  tft.setFont(&FreeMono9pt7b);
-  tft.setTextColor(COR_VERDE2);
-  int endY = printWrapped(montarPreview(script), MARGEM_X, 42, 24, 18);
-  tft.setFont();                             // back to default font
-
-  // Cursor block right after the text
-  tft.fillRect(MARGEM_X, endY - 14, 11, 15, COR_VERDE);
-
   // Divider + BOOT hint (identifies the action button)
   tft.drawFastHLine(MARGEM_X, 108, 320 - 2 * MARGEM_X, COR_BORDA);
-  tft.setTextSize(1);
   tft.setTextColor(COR_VERDE);
   tft.setCursor(MARGEM_X, 114);
   tft.print("press [BOOT] to send");
+
+  // First page of the payload
+  desenharPagina(paginaAtual);
 }
 
 // Redraw only the status line at the bottom (keeps the black background)
@@ -221,6 +258,9 @@ void setup() {
   COR_AMBAR  = tft.color565(255, 210, 61);
   COR_CIANO  = tft.color565(77, 240, 255);
 
+  quebrarEmLinhas(montarPreview(script), 24);  // 24 chars per line in FreeMono
+  ultimaTroca = millis();
+
   desenharBase();
   desenharEstado("[ READY ]", COR_VERDE);
 
@@ -229,6 +269,13 @@ void setup() {
 }
 
 void loop() {
+  // Auto-advance the preview pages on a timer (only if text overflows)
+  if (totalPaginas > 1 && millis() - ultimaTroca >= INTERVALO_PAGINA) {
+    ultimaTroca = millis();
+    paginaAtual = (paginaAtual + 1) % totalPaginas;
+    desenharPagina(paginaAtual);
+  }
+
   if (digitalRead(BOTAO) == LOW) {
     delay(50);  // debounce
 
