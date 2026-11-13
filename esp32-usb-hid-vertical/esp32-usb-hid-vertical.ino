@@ -65,9 +65,9 @@ unsigned long ultimaTroca = 0;
 
 const char* script =
   "DELAY 500\n"
-  "STRING Hello, this text was typed by the ESP32-S3!\n"
+  "STRING Hello! This is a longer demo payload used to test the automatic pagination on the small ST7789 screen.\n"
   "ENTER\n"
-  "STRING USB HID study complete.\n";
+  "STRING When the text does not fit, the display cycles through the pages by itself.\n";
 
 // ============================================================
 //  DISPLAY
