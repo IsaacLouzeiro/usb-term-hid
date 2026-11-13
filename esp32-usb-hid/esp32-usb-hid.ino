@@ -23,6 +23,7 @@
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
+#include <Fonts/FreeMono9pt7b.h>   // smaller monospaced font for the payload
 #include <SPI.h>
 #include "USB.h"
 #include "USBHIDKeyboard.h"
@@ -113,6 +114,7 @@ int printWrapped(const String &txt, int x, int y, int maxChars, int lineH) {
 
 void desenharBase() {
   tft.fillScreen(COR_FUNDO);                 // pure black
+  tft.setFont();                             // default font for the chrome
 
   // Thin terminal frame (gives the border spacing)
   tft.drawRect(4, 4, 312, 162, COR_BORDA);
@@ -123,19 +125,20 @@ void desenharBase() {
   tft.setCursor(MARGEM_X, MARGEM_Y);
   tft.print("esp32@hid:~$ send");
 
-  // Payload text (bigger, size 2, wrapped with margins)
-  tft.setTextSize(2);
+  // Payload text (FreeMono: a bit smaller, true terminal look)
+  tft.setFont(&FreeMono9pt7b);
   tft.setTextColor(COR_VERDE2);
-  int endY = printWrapped(montarPreview(script), MARGEM_X, 32, 23, 20);
+  int endY = printWrapped(montarPreview(script), MARGEM_X, 42, 24, 18);
+  tft.setFont();                             // back to default font
 
   // Cursor block right after the text
-  tft.fillRect(MARGEM_X, endY + 2, 12, 16, COR_VERDE);
+  tft.fillRect(MARGEM_X, endY - 14, 11, 15, COR_VERDE);
 
   // Divider + BOOT hint (identifies the action button)
-  tft.drawFastHLine(MARGEM_X, 116, 320 - 2 * MARGEM_X, COR_BORDA);
+  tft.drawFastHLine(MARGEM_X, 108, 320 - 2 * MARGEM_X, COR_BORDA);
   tft.setTextSize(1);
   tft.setTextColor(COR_VERDE);
-  tft.setCursor(MARGEM_X, 124);
+  tft.setCursor(MARGEM_X, 114);
   tft.print("press [BOOT] to send");
 }
 

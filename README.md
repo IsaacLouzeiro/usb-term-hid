@@ -58,9 +58,17 @@ O script fica na variável `script` dentro do `.ino`. Um comando por linha:
 | `GUI r`        | tecla Windows/Cmd + r              |
 | `# ...`        | comentário (ignorado)              |
 
+## Layouts disponíveis
+
+O projeto tem duas versões do mesmo visual (tema terminal), escolha a que
+preferir:
+
+- `esp32-usb-hid/` — tela na **horizontal** (320×170)
+- `esp32-usb-hid-vertical/` — tela na **vertical** (170×320)
+
 ## Como usar
 
-1. Abra `esp32-usb-hid/esp32-usb-hid.ino` no Arduino IDE.
+1. Abra `esp32-usb-hid/esp32-usb-hid.ino` (ou a pasta `-vertical`) no Arduino IDE.
 2. Ajuste as opções de `Tools` acima e grave na placa.
 3. Clique num editor de texto no PC para deixar o cursor ativo.
 4. Aperte o botão **BOOT**. O texto da tela será digitado.
