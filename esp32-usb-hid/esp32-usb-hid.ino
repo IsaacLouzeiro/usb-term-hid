@@ -1,22 +1,24 @@
 // ============================================================
-//  ESP32-S3 - Estudo de USB HID com tela TFT ST7789
+//  ESP32-S3 - USB HID study with ST7789 TFT (terminal theme)
 // ------------------------------------------------------------
-//  A placa se conecta ao PC pela porta USB NATIVA e se passa
-//  por um TECLADO. Ao apertar o botao BOOT (GPIO0) ela "digita"
-//  o script abaixo. A tela ST7789 mostra o texto que sera
-//  enviado e o estado atual (pronto / enviando / enviado).
+//  The board connects to the PC over the NATIVE USB port and
+//  acts as a KEYBOARD (USB HID). Pressing the BOOT button
+//  (GPIO0) makes it "type" the script below. The ST7789 1.9"
+//  display shows the text to be sent and the current state.
 //
-//  Comandos do script (um por linha):
-//     STRING <texto>   digita o texto
-//     ENTER            tecla Enter
-//     TAB              tecla Tab
-//     DELAY <ms>       espera X milissegundos
-//     GUI <tecla>      tecla Windows/Cmd + tecla   (ex: GUI r)
-//     #comentario      linha ignorada
+//  Script commands (one per line):
+//     STRING <text>    type the text
+//     ENTER            Enter key
+//     TAB              Tab key
+//     DELAY <ms>       wait X milliseconds
+//     GUI <key>        Windows/Cmd + key   (e.g. GUI r)
+//     #comment         ignored line
 //
-//  Opcoes no Arduino IDE (Tools):
+//  Arduino IDE options (Tools):
 //     USB Mode        = "USB-OTG (TinyUSB)"
 //     USB CDC On Boot = "Enabled"
+//
+//  NOTE: UI text is English for now; a language menu is planned.
 // ============================================================
 
 #include <Adafruit_GFX.h>
@@ -25,7 +27,7 @@
 #include "USB.h"
 #include "USBHIDKeyboard.h"
 
-// ---------- Pinos da tela ----------
+// ---------- Display pins ----------
 #define TFT_SCLK 12
 #define TFT_MOSI 11
 #define TFT_CS   10
@@ -33,37 +35,34 @@
 #define TFT_RST   8
 #define TFT_BLK   7
 
-// ---------- Botao ----------
-#define BOTAO 0   // botao BOOT
-
-// ---------- Cores do tema ----------
-#define COR_FUNDO    0x0841   // cinza bem escuro
-#define COR_BARRA    0x04DF   // azul
-#define COR_CAIXA    0x18E3   // cinza escuro
-#define COR_BORDA    0x3186   // cinza medio
-#define COR_TEXTO    ST77XX_WHITE
-#define COR_LABEL    0x8410   // cinza claro
-#define COR_PRONTO   0x05E0   // verde
-#define COR_ENVIANDO 0xFD20   // laranja
-#define COR_FEITO    0x04DF   // azul
+// ---------- Button ----------
+#define BOTAO 0   // on-board BOOT button
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 USBHIDKeyboard teclado;
 
-int enviados = 0;  // contador de envios
+// ---------- Terminal theme colors (set in setup) ----------
+uint16_t COR_FUNDO;     // background
+uint16_t COR_VERDE;     // bright green (prompt / ready)
+uint16_t COR_VERDE2;    // soft green (output text)
+uint16_t COR_BARRA;     // status bar background
+uint16_t COR_AMBAR;     // amber (sending)
+uint16_t COR_CIANO;     // cyan (sent)
 
-// ---- O "arquivo" de comandos (por enquanto embutido no codigo) ----
+int enviados = 0;       // send counter
+
+// ---- Command "file" (embedded in code for now) ----
 const char* script =
   "DELAY 500\n"
-  "STRING Ola, este texto foi digitado pelo ESP32-S3!\n"
+  "STRING Hello, this text was typed by the ESP32-S3!\n"
   "ENTER\n"
-  "STRING Estudo de USB HID concluido.\n";
+  "STRING USB HID study complete.\n";
 
 // ============================================================
-//  TELA
+//  DISPLAY
 // ============================================================
 
-// Monta o texto de previa juntando as linhas STRING do script
+// Build the preview text by joining the STRING lines of the script
 String montarPreview(const char* texto) {
   String preview = "";
   String linha = "";
@@ -87,55 +86,49 @@ String montarPreview(const char* texto) {
 void desenharBase() {
   tft.fillScreen(COR_FUNDO);
 
-  // Barra de titulo
-  tft.fillRect(0, 0, 320, 30, COR_BARRA);
-  tft.setTextColor(COR_TEXTO);
-  tft.setTextSize(2);
-  tft.setCursor(10, 7);
-  tft.print("USB HID  ESP32-S3");
-
-  // Rotulo da caixa
+  // Prompt line
   tft.setTextSize(1);
-  tft.setTextColor(COR_LABEL);
-  tft.setCursor(10, 40);
-  tft.print("TEXTO A ENVIAR:");
+  tft.setTextColor(COR_VERDE);
+  tft.setCursor(8, 10);
+  tft.print("esp32@hid:~$ send");
 
-  // Caixa com o texto de previa
-  tft.fillRoundRect(8, 52, 304, 60, 6, COR_CAIXA);
-  tft.drawRoundRect(8, 52, 304, 60, 6, COR_BORDA);
+  // Output label
+  tft.setTextColor(COR_VERDE2);
+  tft.setCursor(8, 30);
+  tft.print("> payload:");
 
-  tft.setTextColor(COR_TEXTO);
-  tft.setTextSize(1);
+  // Preview text (wrapped)
   tft.setTextWrap(true);
-  tft.setCursor(16, 60);
+  tft.setCursor(8, 48);
   tft.print(montarPreview(script));
   tft.setTextWrap(false);
+
+  // Cursor block just below the text
+  int cy = tft.getCursorY() + 14;
+  if (cy > 120) cy = 120;
+  tft.fillRect(8, cy, 9, 12, COR_VERDE);
 }
 
-// Atualiza so a barra de estado (parte de baixo)
+// Redraw only the status bar at the bottom
 void desenharEstado(const char* texto, uint16_t cor) {
-  tft.fillRoundRect(8, 122, 304, 40, 6, cor);
+  tft.fillRect(0, 138, 320, 32, COR_BARRA);
 
-  // texto centralizado
   tft.setTextSize(2);
-  int16_t x1, y1; uint16_t w, h;
-  tft.getTextBounds(texto, 0, 0, &x1, &y1, &w, &h);
-  tft.setTextColor(ST77XX_BLACK);
-  tft.setCursor(160 - w / 2, 133);
+  tft.setTextColor(cor);
+  tft.setCursor(8, 146);
   tft.print(texto);
 
-  // contador de envios
+  // Send counter on the right
   tft.setTextSize(1);
-  tft.setTextColor(COR_LABEL);
-  char buf[24];
-  snprintf(buf, sizeof(buf), "Envios: %d", enviados);
-  tft.fillRect(0, 164, 320, 8, COR_FUNDO);
-  tft.setCursor(10, 164);
+  tft.setTextColor(COR_VERDE2);
+  char buf[16];
+  snprintf(buf, sizeof(buf), "sent:%d", enviados);
+  tft.setCursor(258, 150);
   tft.print(buf);
 }
 
 // ============================================================
-//  SCRIPT (teclado)
+//  SCRIPT (keyboard)
 // ============================================================
 
 void executarLinha(String linha) {
@@ -185,10 +178,18 @@ void setup() {
 
   SPI.begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
   tft.init(170, 320);
-  tft.setRotation(1);   // paisagem 320x170
+  tft.setRotation(1);   // landscape 320x170
+
+  // Build theme colors
+  COR_FUNDO  = tft.color565(5, 8, 5);
+  COR_VERDE  = tft.color565(61, 255, 106);
+  COR_VERDE2 = tft.color565(140, 255, 169);
+  COR_BARRA  = tft.color565(11, 22, 12);
+  COR_AMBAR  = tft.color565(255, 210, 61);
+  COR_CIANO  = tft.color565(77, 240, 255);
 
   desenharBase();
-  desenharEstado("PRONTO", COR_PRONTO);
+  desenharEstado("[ READY ]", COR_VERDE);
 
   teclado.begin();
   USB.begin();
@@ -196,14 +197,14 @@ void setup() {
 
 void loop() {
   if (digitalRead(BOTAO) == LOW) {
-    delay(50);  // anti-ruido
+    delay(50);  // debounce
 
-    desenharEstado("ENVIANDO...", COR_ENVIANDO);
+    desenharEstado("[ SENDING ]", COR_AMBAR);
     rodarScript(script);
     enviados++;
 
-    desenharEstado("ENVIADO!", COR_FEITO);
+    desenharEstado("[ SENT ]", COR_CIANO);
     delay(1200);
-    desenharEstado("PRONTO", COR_PRONTO);
+    desenharEstado("[ READY ]", COR_VERDE);
   }
 }
