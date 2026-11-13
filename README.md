@@ -75,21 +75,23 @@ Um único botão controla tudo, pelo tempo e número de toques:
 | Menu      | próximo arquivo | arquivo anterior | abrir o selecionado |
 | Prévia    | voltar ao menu  | voltar ao menu   | enviar (digitar) |
 
-## Layouts disponíveis
+## Menu na tela
 
-O projeto tem duas versões do mesmo visual (tema terminal), escolha a que
-preferir:
+Um único sketch, com um menu principal navegado pelo BOOT:
 
-- `esp32-usb-hid/` — tela na **horizontal** (320×170)
-- `esp32-usb-hid-vertical/` — tela na **vertical** (170×320)
+- **Payloads** — lista os arquivos de script; abrir mostra a prévia e permite enviar.
+- **Config** — ajustes do dispositivo. Hoje: **orientação da tela**
+  (horizontal/vertical), trocada na hora e salva em `/config.txt`.
+- **About** — nome do programa, autor e versão.
 
 ## Como usar
 
-1. Abra `esp32-usb-hid/esp32-usb-hid.ino` (ou a pasta `-vertical`) no Arduino IDE.
+1. Abra `esp32-usb-hid/esp32-usb-hid.ino` no Arduino IDE.
 2. Ajuste as opções de `Tools` acima e grave na placa.
-3. No menu da tela, use o **BOOT** para escolher o arquivo (clique/duplo) e
-   segure para abrir.
+3. No menu principal, entre em **Payloads** e escolha um arquivo com o **BOOT**
+   (clique/duplo navegam, segurar abre).
 4. Na prévia, clique num editor de texto no PC e **segure o BOOT** para enviar.
+5. A orientação da tela fica em **Config → Tela**.
 
 ## Próximos passos
 
