@@ -362,7 +362,8 @@ void drawAbout() {
 
 void drawPage(int p) {
   int w = W();
-  int plBottom = H() - 56;            // leave room for divider + hint + status
+  // vertical reserves an extra line above the footer for the sent counter
+  int plBottom = vertical ? (H() - 76) : (H() - 56);
   tft.fillRect(6, 26, w - 12, plBottom - 26, C_BG);
 
   tft.setFont();
@@ -405,8 +406,11 @@ void drawStatus(const char* text, uint16_t color) {
   tft.setTextSize(1);
   tft.setTextColor(C_GREEN2);
   if (vertical) {
-    tft.fillRect(104, 10, 58, 10, C_BG);
-    tft.setCursor(104, MARGIN_Y);
+    // own line just above the footer, right-aligned (no clash with pg x/y)
+    int cy = H() - 68;
+    int cx = w - MARGIN_X - 6 * (int)strlen(buf);
+    tft.fillRect(6, cy - 4, w - 12, 10, C_BG);
+    tft.setCursor(cx, cy);
   } else {
     tft.setCursor(w - 70, sy + 6);
   }
