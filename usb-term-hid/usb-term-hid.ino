@@ -75,6 +75,7 @@ bool wifiOn = false;
 uint16_t C_BG, C_GREEN, C_GREEN2, C_BORDER, C_AMBER, C_CYAN;
 
 bool vertical = false;     // false = horizontal, true = vertical
+bool layoutBR = false;     // false = US layout, true = ABNT2 (Brazil)
 int sentCount = 0;
 
 int W() { return vertical ? 170 : 320; }
@@ -113,12 +114,17 @@ unsigned long lastSwitch = 0;
 
 void saveConfig() {
   File f = LittleFS.open("/config.txt", "w");
-  if (f) { f.print(vertical ? "V" : "H"); f.close(); }
+  if (f) { f.print(String(vertical ? "V" : "H") + (layoutBR ? "B" : "U")); f.close(); }
 }
 
 void loadConfig() {
   File f = LittleFS.open("/config.txt", "r");
-  if (f) { if (f.available()) vertical = (f.read() == 'V'); f.close(); }
+  if (!f) return;
+  String s = "";
+  while (f.available()) s += (char)f.read();
+  f.close();
+  if (s.length() >= 1) vertical = (s[0] == 'V');
+  if (s.length() >= 2) layoutBR = (s[1] == 'B');
 }
 
 void applyOrientation() {
@@ -258,6 +264,57 @@ bool pressToken(const String &raw) {
   return false;
 }
 
+// ============================================================
+//  KEYBOARD LAYOUT (STRING typing)
+//  US: use the library's print(). BR (ABNT2): remap the ASCII
+//  punctuation whose physical key differs from US. Letters,
+//  digits and matching symbols fall back to print().
+//  (Accents / ç need UTF-8 handling - planned.)
+// ============================================================
+
+// Send one raw HID key (usage id) with a modifier byte, then release.
+void sendRaw(uint8_t mod, uint8_t usage) {
+  KeyReport r;
+  r.modifiers = mod;
+  r.reserved = 0;
+  for (int i = 0; i < 6; i++) r.keys[i] = 0;
+  r.keys[0] = usage;
+  keyboard.sendReport(&r);
+  r.modifiers = 0;
+  r.keys[0] = 0;
+  keyboard.sendReport(&r);
+}
+
+// ABNT2 remap for ASCII punctuation that sits on a different key than US.
+// mod: 0x02 = Shift. usage = HID usage id of the physical key.
+bool brRemap(char c, uint8_t &mod, uint8_t &usage) {
+  switch (c) {
+    case '/':  mod = 0x00; usage = 0x87; return true;
+    case '?':  mod = 0x02; usage = 0x87; return true;
+    case ';':  mod = 0x00; usage = 0x38; return true;
+    case ':':  mod = 0x02; usage = 0x38; return true;
+    case '\'': mod = 0x00; usage = 0x35; return true;
+    case '"':  mod = 0x02; usage = 0x35; return true;
+    case '[':  mod = 0x00; usage = 0x30; return true;
+    case '{':  mod = 0x02; usage = 0x30; return true;
+    case ']':  mod = 0x00; usage = 0x31; return true;
+    case '}':  mod = 0x02; usage = 0x31; return true;
+    case '\\': mod = 0x00; usage = 0x64; return true;
+    case '|':  mod = 0x02; usage = 0x64; return true;
+    default:   return false;
+  }
+}
+
+void typeString(const String &s) {
+  if (!layoutBR) { keyboard.print(s); return; }
+  for (unsigned int i = 0; i < s.length(); i++) {
+    char c = s[i];
+    uint8_t mod, usage;
+    if (brRemap(c, mod, usage)) sendRaw(mod, usage);
+    else keyboard.print(c);
+  }
+}
+
 void runLine(String line) {
   line.trim();
   if (line.length() == 0 || line.startsWith("#")) return;
@@ -267,7 +324,7 @@ void runLine(String line) {
   String arg = (sp == -1) ? ""   : line.substring(sp + 1);
   String up = cmd; up.toUpperCase();
 
-  if (up == "STRING") { keyboard.print(arg); return; }
+  if (up == "STRING") { typeString(arg); return; }
   if (up == "DELAY")  { delay(arg.toInt()); return; }
 
   // Otherwise it is a key or a combo: press each token, then release all.
@@ -340,7 +397,8 @@ void buildItems() {
     for (int i = 0; i < totalFiles; i++) items[nItems++] = displayName(i);
   } else if (state == CONFIG) {
     items[nItems++] = "< back";
-    items[nItems++] = String("Screen [") + (vertical ? "V" : "H") + "]";
+    items[nItems++] = String("Screen: ") + (vertical ? "Vertical" : "Horizontal");
+    items[nItems++] = String("Layout: ") + (layoutBR ? "ABNT2" : "US");
     items[nItems++] = "Wi-Fi";
   }
 }
@@ -372,18 +430,21 @@ void drawList(const char* title) {
   tft.setCursor(MARGIN_X, MARGIN_Y);
   tft.print(title);
 
+  // Config uses a smaller font so the full labels fit in both orientations
+  int itemSize = (state == CONFIG) ? 1 : 2;
   int startY = vertical ? 44 : 36;
-  int lineH  = vertical ? 28 : 24;
+  int lineH  = (itemSize == 2) ? (vertical ? 28 : 24) : 20;
+  int barH   = (itemSize == 2) ? (lineH - 4) : 14;
   int divY   = h - 46;
   int maxVis = (divY - startY) / lineH;
   if (maxVis < 1) maxVis = 1;
   int first = (sel >= maxVis) ? (sel - maxVis + 1) : 0;
 
-  tft.setTextSize(2);
+  tft.setTextSize(itemSize);
   int y = startY;
   for (int i = first; i < nItems && i < first + maxVis; i++) {
     if (i == sel) {
-      tft.fillRect(6, y - 2, w - 12, lineH - 4, C_BORDER);
+      tft.fillRect(6, y - 2, w - 12, barH, C_BORDER);
       tft.setTextColor(C_GREEN);
     } else {
       tft.setTextColor(C_GREEN2);
@@ -748,6 +809,10 @@ void loop() {
         else if (sel == 1) {                          // toggle orientation
           vertical = !vertical;
           applyOrientation();
+          saveConfig();
+          redraw();
+        } else if (sel == 2) {                        // toggle keyboard layout
+          layoutBR = !layoutBR;
           saveConfig();
           redraw();
         } else {                                      // Wi-Fi
