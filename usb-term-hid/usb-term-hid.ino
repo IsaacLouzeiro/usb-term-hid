@@ -822,29 +822,38 @@ void drawWifi() {
 //  BOOT SPLASH - an original boar dashing across the screen
 // ============================================================
 
-// Draw a simple boar silhouette facing right at (x,y). step animates the legs.
-void drawBoar(int x, int y, int step) {
-  // body
-  tft.fillRoundRect(x, y, 44, 22, 7, C_GREEN);
-  // head
-  tft.fillRoundRect(x + 36, y + 4, 18, 16, 4, C_GREEN);
-  // snout
-  tft.fillRect(x + 52, y + 9, 6, 7, C_GREEN2);
-  // ear
-  tft.fillTriangle(x + 40, y + 4, x + 46, y - 5, x + 50, y + 4, C_GREEN);
-  // tusk
-  tft.fillTriangle(x + 54, y + 16, x + 59, y + 13, x + 56, y + 20, C_GREEN2);
-  // tail
-  tft.drawLine(x, y + 6, x - 6, y + 1, C_GREEN);
-  // legs (alternate for a running feel)
-  int o = (step % 2) ? 5 : 0;
-  tft.fillRect(x + 7,  y + 22, 4, 8 + o,       C_GREEN);
-  tft.fillRect(x + 15, y + 22, 4, 8 + (5 - o), C_GREEN);
-  tft.fillRect(x + 28, y + 22, 4, 8 + o,       C_GREEN);
-  tft.fillRect(x + 36, y + 22, 4, 8 + (5 - o), C_GREEN);
-  // snort puffs in front of the snout
-  tft.drawCircle(x + 64, y + 6, 3 + (step % 3), C_GREEN2);
-  tft.drawCircle(x + 71, y + 2, 2 + (step % 2), C_GREEN2);
+// A ~3px limb drawn with a few offset lines
+void limb(int x0, int y0, int x1, int y1, uint16_t c) {
+  tft.drawLine(x0, y0, x1, y1, c);
+  tft.drawLine(x0 + 1, y0, x1 + 1, y1, c);
+  tft.drawLine(x0, y0 + 1, x1, y1 + 1, c);
+}
+
+// Original figure: a human running (facing right) with a boar head, snorting.
+// step animates the stride. (x,y) is the top-left of the head.
+void drawRunner(int x, int y, int step) {
+  int o = (step % 2) ? 6 : -6;   // stride / arm swing
+
+  // boar head
+  tft.fillRoundRect(x + 4, y, 22, 16, 5, C_GREEN);
+  tft.fillRect(x + 24, y + 6, 7, 6, C_GREEN2);                 // snout
+  tft.fillTriangle(x + 6, y, x + 1, y - 7, x + 11, y, C_GREEN); // ear
+  tft.fillTriangle(x + 28, y + 12, x + 33, y + 9, x + 30, y + 16, C_GREEN2); // tusk
+
+  // torso (leaning forward)
+  tft.fillRoundRect(x + 10, y + 16, 11, 20, 4, C_GREEN);
+
+  // arms (swing opposite to legs)
+  limb(x + 15, y + 19, x + 28, y + 14 + o, C_GREEN);
+  limb(x + 15, y + 19, x + 3,  y + 24 - o, C_GREEN);
+
+  // legs (running stride)
+  limb(x + 14, y + 35, x + 26, y + 50 + o, C_GREEN);
+  limb(x + 16, y + 35, x + 6,  y + 50 - o, C_GREEN);
+
+  // snort puffs out of the snout
+  tft.drawCircle(x + 36, y + 8, 3 + (step % 3), C_GREEN2);
+  tft.drawCircle(x + 42, y + 4, 2 + (step % 2), C_GREEN2);
 }
 
 void bootSplash() {
@@ -859,10 +868,10 @@ void bootSplash() {
     tft.setTextColor(C_GREEN);
     tft.setCursor((w - titleW) / 2, h / 2 - 30);
     tft.print("USB HID");
-    // speed lines trailing the boar
+    // speed lines trailing the runner
     for (int k = 0; k < 3; k++)
-      tft.drawFastHLine(x - 22 - k * 10, y + 4 + k * 6, 16, C_BORDER);
-    drawBoar(x, y, x / 10);
+      tft.drawFastHLine(x - 18 - k * 10, y + 18 + k * 7, 16, C_BORDER);
+    drawRunner(x, y, x / 10);
     delay(32);
   }
 
