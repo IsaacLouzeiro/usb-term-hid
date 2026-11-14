@@ -177,6 +177,46 @@ String displayName(int i) {
 //  SCRIPT PARSING / PREVIEW
 // ============================================================
 
+// Fold a Latin-1 accented codepoint to its ASCII base (for the TFT preview only)
+char foldChar(uint16_t cp) {
+  if (cp >= 0xC0 && cp <= 0xC5) return 'A';
+  if (cp == 0xC7)               return 'C';
+  if (cp >= 0xC8 && cp <= 0xCB) return 'E';
+  if (cp >= 0xCC && cp <= 0xCF) return 'I';
+  if (cp == 0xD1)               return 'N';
+  if (cp >= 0xD2 && cp <= 0xD6) return 'O';
+  if (cp >= 0xD9 && cp <= 0xDC) return 'U';
+  if (cp >= 0xE0 && cp <= 0xE5) return 'a';
+  if (cp == 0xE7)               return 'c';
+  if (cp >= 0xE8 && cp <= 0xEB) return 'e';
+  if (cp >= 0xEC && cp <= 0xEF) return 'i';
+  if (cp == 0xF1)               return 'n';
+  if (cp >= 0xF2 && cp <= 0xF6) return 'o';
+  if (cp >= 0xF9 && cp <= 0xFC) return 'u';
+  return '?';
+}
+
+// The terminal font has no accent glyphs, so normalize UTF-8 text to ASCII
+// for display. Typing uses the original bytes, so accents still go out right.
+String foldAscii(const String &s) {
+  String o = "";
+  for (unsigned int i = 0; i < s.length(); i++) {
+    uint8_t c = (uint8_t)s[i];
+    if (c == 0xC3 && i + 1 < s.length()) {
+      o += foldChar(0xC0 | ((uint8_t)s[i + 1] & 0x3F));
+      i++;
+    } else if (c == 0xC2 && i + 1 < s.length()) {
+      o += '?';
+      i++;
+    } else if (c < 0x80) {
+      o += (char)c;
+    } else {
+      o += '?';
+    }
+  }
+  return o;
+}
+
 String buildPreview(const char* text) {
   String preview = "", line = "";
   for (int i = 0; ; i++) {
@@ -191,7 +231,7 @@ String buildPreview(const char* text) {
       if (c == '\0') break;
     } else line += c;
   }
-  return preview;
+  return foldAscii(preview);
 }
 
 void wrapLines(const String &txt, int maxChars) {
@@ -266,10 +306,10 @@ bool pressToken(const String &raw) {
 
 // ============================================================
 //  KEYBOARD LAYOUT (STRING typing)
-//  US: use the library's print(). BR (ABNT2): remap the ASCII
-//  punctuation whose physical key differs from US. Letters,
-//  digits and matching symbols fall back to print().
-//  (Accents / ç need UTF-8 handling - planned.)
+//  US: use the library's print(). BR (ABNT2): remap punctuation
+//  that sits on a different key than US, type accented letters
+//  via dead keys, and type ç directly. Script files must be
+//  saved as UTF-8 for accents to work.
 // ============================================================
 
 // Send one raw HID key (usage id) with a modifier byte, then release.
@@ -305,13 +345,71 @@ bool brRemap(char c, uint8_t &mod, uint8_t &usage) {
   }
 }
 
+// Type a dead key then a base letter (ABNT2). d: 1 acute, 2 grave, 3 circ, 4 tilde
+void typeDead(int d, char base) {
+  if (d == 1)      sendRaw(0x00, 0x2F);   // ´ acute
+  else if (d == 2) sendRaw(0x02, 0x2F);   // ` grave
+  else if (d == 3) sendRaw(0x02, 0x34);   // ^ circumflex
+  else if (d == 4) sendRaw(0x00, 0x34);   // ~ tilde
+  delay(5);
+  keyboard.print(base);
+}
+
+// Type one Latin-1 accented codepoint (U+00C0..U+00FF) on ABNT2
+void typeAccented(uint16_t cp) {
+  switch (cp) {
+    case 0xE1: typeDead(1, 'a'); break;  // á
+    case 0xE9: typeDead(1, 'e'); break;  // é
+    case 0xED: typeDead(1, 'i'); break;  // í
+    case 0xF3: typeDead(1, 'o'); break;  // ó
+    case 0xFA: typeDead(1, 'u'); break;  // ú
+    case 0xC1: typeDead(1, 'A'); break;
+    case 0xC9: typeDead(1, 'E'); break;
+    case 0xCD: typeDead(1, 'I'); break;
+    case 0xD3: typeDead(1, 'O'); break;
+    case 0xDA: typeDead(1, 'U'); break;
+    case 0xE0: typeDead(2, 'a'); break;  // à
+    case 0xC0: typeDead(2, 'A'); break;
+    case 0xE2: typeDead(3, 'a'); break;  // â
+    case 0xEA: typeDead(3, 'e'); break;  // ê
+    case 0xF4: typeDead(3, 'o'); break;  // ô
+    case 0xC2: typeDead(3, 'A'); break;
+    case 0xCA: typeDead(3, 'E'); break;
+    case 0xD4: typeDead(3, 'O'); break;
+    case 0xE3: typeDead(4, 'a'); break;  // ã
+    case 0xF5: typeDead(4, 'o'); break;  // õ
+    case 0xF1: typeDead(4, 'n'); break;  // ñ
+    case 0xC3: typeDead(4, 'A'); break;
+    case 0xD5: typeDead(4, 'O'); break;
+    case 0xD1: typeDead(4, 'N'); break;
+    case 0xE7: sendRaw(0x00, 0x33); break;  // ç
+    case 0xC7: sendRaw(0x02, 0x33); break;  // Ç
+    default: break;                          // unsupported: skip
+  }
+}
+
 void typeString(const String &s) {
   if (!layoutBR) { keyboard.print(s); return; }
-  for (unsigned int i = 0; i < s.length(); i++) {
-    char c = s[i];
+  unsigned int i = 0;
+  while (i < s.length()) {
+    uint8_t c = (uint8_t)s[i];
+
+    // UTF-8 Latin-1 supplement (accents, ç): 0xC3 0x80..0xBF
+    if (c == 0xC3 && i + 1 < s.length()) {
+      uint16_t cp = 0xC0 | ((uint8_t)s[i + 1] & 0x3F);
+      typeAccented(cp);
+      i += 2;
+      continue;
+    }
+
+    char ch = (char)c;
     uint8_t mod, usage;
-    if (brRemap(c, mod, usage)) sendRaw(mod, usage);
-    else keyboard.print(c);
+    if (ch == '~')      { sendRaw(0x00, 0x34); sendRaw(0x00, 0x2C); }  // tilde + space
+    else if (ch == '^') { sendRaw(0x02, 0x34); sendRaw(0x00, 0x2C); }  // circ + space
+    else if (ch == '`') { sendRaw(0x02, 0x2F); sendRaw(0x00, 0x2C); }  // grave + space
+    else if (brRemap(ch, mod, usage)) sendRaw(mod, usage);
+    else keyboard.print(ch);
+    i += 1;
   }
 }
 

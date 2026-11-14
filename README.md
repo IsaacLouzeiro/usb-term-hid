@@ -100,8 +100,8 @@ CTRL SHIFT ESC     # Task Manager on Windows
   - `US` — default; assumes the target PC uses a US layout.
   - `ABNT2` — remaps the ASCII punctuation (`/ ? ; : ' " [ ] { } \ |`) to the
     Brazilian layout so paths and symbols come out right.
-  - Letters and digits are always correct. Accents and `ç` are not handled yet
-    (they need UTF-8 input) — planned.
+  - Letters, digits and punctuation are handled. Accents and `ç` also work when
+    the script file is UTF-8 (`á é í ó ú â ê ô ã õ à`, `ç` and capitals).
 
 ## BOOT button navigation
 
@@ -147,6 +147,5 @@ The board can bring up its own Wi-Fi access point with a small web page to
 - [x] Config menu (screen orientation)
 - [x] Shortcut commands (CTRL/ALT/SHIFT/GUI combos, function and navigation keys)
 - [x] Wi-Fi access point with a web page to edit payloads
-- [x] Keyboard layout option for `STRING` punctuation (US / ABNT2)
-- [ ] Full ABNT2 support including accents and `ç` (UTF-8)
+- [x] Keyboard layout option for `STRING` (US / ABNT2, incl. accents and `ç`)
 - [ ] USB mass-storage mode to drag-and-drop scripts
