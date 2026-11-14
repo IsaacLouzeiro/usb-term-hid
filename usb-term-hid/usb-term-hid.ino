@@ -818,6 +818,76 @@ void drawWifi() {
   footer(wifiOn ? "hold: turn off" : "hold: turn on", "click: back");
 }
 
+// ============================================================
+//  BOOT SPLASH - an original boar dashing across the screen
+// ============================================================
+
+// A ~3px limb drawn with a few offset lines
+void limb(int x0, int y0, int x1, int y1, uint16_t c) {
+  tft.drawLine(x0, y0, x1, y1, c);
+  tft.drawLine(x0 + 1, y0, x1 + 1, y1, c);
+  tft.drawLine(x0, y0 + 1, x1, y1 + 1, c);
+}
+
+// Original figure: a human running (facing right) with a boar head, snorting.
+// step animates the stride. (x,y) is the top-left of the head.
+void drawRunner(int x, int y, int step) {
+  int o = (step % 2) ? 6 : -6;   // stride / arm swing
+
+  // boar head
+  tft.fillRoundRect(x + 4, y, 22, 16, 5, C_GREEN);
+  tft.fillRect(x + 24, y + 6, 7, 6, C_GREEN2);                 // snout
+  tft.fillTriangle(x + 6, y, x + 1, y - 7, x + 11, y, C_GREEN); // ear
+  tft.fillTriangle(x + 28, y + 12, x + 33, y + 9, x + 30, y + 16, C_GREEN2); // tusk
+
+  // torso (leaning forward)
+  tft.fillRoundRect(x + 10, y + 16, 11, 20, 4, C_GREEN);
+
+  // arms (swing opposite to legs)
+  limb(x + 15, y + 19, x + 28, y + 14 + o, C_GREEN);
+  limb(x + 15, y + 19, x + 3,  y + 24 - o, C_GREEN);
+
+  // legs (running stride)
+  limb(x + 14, y + 35, x + 26, y + 50 + o, C_GREEN);
+  limb(x + 16, y + 35, x + 6,  y + 50 - o, C_GREEN);
+
+  // snort puffs out of the snout
+  tft.drawCircle(x + 36, y + 8, 3 + (step % 3), C_GREEN2);
+  tft.drawCircle(x + 42, y + 4, 2 + (step % 2), C_GREEN2);
+}
+
+void bootSplash() {
+  int w = W(), h = H();
+  int y = h / 2 + 4;
+  int titleW = 7 * 12;              // "USB HID" at text size 2
+
+  for (int x = -72; x < w + 12; x += 10) {
+    tft.fillScreen(C_BG);
+    tft.setFont();
+    tft.setTextSize(2);
+    tft.setTextColor(C_GREEN);
+    tft.setCursor((w - titleW) / 2, h / 2 - 30);
+    tft.print("USB HID");
+    // speed lines trailing the runner
+    for (int k = 0; k < 3; k++)
+      tft.drawFastHLine(x - 18 - k * 10, y + 18 + k * 7, 16, C_BORDER);
+    drawRunner(x, y, x / 10);
+    delay(32);
+  }
+
+  // short hold with title + subtitle
+  tft.fillScreen(C_BG);
+  tft.setTextSize(2);
+  tft.setTextColor(C_GREEN);
+  tft.setCursor((w - titleW) / 2, h / 2 - 16);
+  tft.print("USB HID");
+  tft.setTextSize(1);
+  tft.setTextColor(C_GREEN2);
+  tft.setCursor((w - 10 * 6) / 2, h / 2 + 8);
+  tft.print("loading...");
+  delay(700);
+}
+
 // Draw whatever the current screen is
 void redraw() {
   if (state == MAIN_MENU || state == PAYLOADS || state == CONFIG) buildItems();
@@ -863,6 +933,7 @@ void setup() {
   listFiles();
   if (totalFiles == 0) { seedDefaults(); listFiles(); }
 
+  bootSplash();
   goTo(MAIN_MENU);
 
   keyboard.begin();
