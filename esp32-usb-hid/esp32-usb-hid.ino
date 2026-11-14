@@ -271,11 +271,11 @@ void montarItens() {
     itens[nItens++] = "Config";
     itens[nItens++] = "About";
   } else if (estado == PAYLOADS) {
-    itens[nItens++] = "< voltar";
+    itens[nItens++] = "< back";
     for (int i = 0; i < totalArq; i++) itens[nItens++] = nomeExibicao(i);
   } else if (estado == CONFIG) {
-    itens[nItens++] = String("Tela: ") + (vertical ? "Vert" : "Horiz");
-    itens[nItens++] = "< voltar";
+    itens[nItens++] = "< back";
+    itens[nItens++] = String("Screen [") + (vertical ? "V" : "H") + "]";
   }
 }
 
@@ -328,7 +328,7 @@ void desenharLista(const char* titulo) {
     y += lineH;
   }
 
-  rodape("click:prox  2x:ant", "hold:selecionar");
+  rodape("click:next  2x:prev", "hold:select");
 }
 
 void desenharAbout() {
@@ -344,18 +344,19 @@ void desenharAbout() {
 
   tft.setTextSize(2);
   tft.setTextColor(COR_VERDE);
-  tft.setCursor(MARGEM_X, vertical ? 56 : 40);
+  tft.setCursor(MARGEM_X, vertical ? 58 : 38);
   tft.print(APP_NOME);
 
   tft.setTextSize(1);
   tft.setTextColor(COR_VERDE2);
-  int y = vertical ? 86 : 70;
-  tft.setCursor(MARGEM_X, y); tft.print("ESP32-S3 keyboard"); y += 16;
-  tft.setCursor(MARGEM_X, y); tft.print("Autor: " APP_AUTOR);  y += 16;
-  tft.setCursor(MARGEM_X, y); tft.print("Estudo de USB HID");  y += 16;
+  int dy = vertical ? 16 : 14;
+  int y  = vertical ? 90 : 64;
+  tft.setCursor(MARGEM_X, y); tft.print("ESP32-S3 keyboard"); y += dy;
+  tft.setCursor(MARGEM_X, y); tft.print("Author: " APP_AUTOR);  y += dy;
+  tft.setCursor(MARGEM_X, y); tft.print("USB HID study");       y += dy;
   tft.setCursor(MARGEM_X, y); tft.print(APP_VERSAO);
 
-  rodape("click/hold: voltar", "");
+  rodape("click/hold: back", "");
 }
 
 void desenharPagina(int p) {
@@ -423,7 +424,7 @@ void desenharPreview() {
   tft.print("cat ");
   tft.print(nomeExibicao(arqAtual));
 
-  rodape("click:voltar", "hold:enviar");
+  rodape("click:back", "hold:send");
   desenharPagina(paginaAtual);
   desenharEstado("[ READY ]", COR_VERDE);
 }
@@ -497,7 +498,7 @@ void loop() {
       if (g == 1) { sel = (sel + 1) % nItens; redraw(); }
       else if (g == 2) { sel = (sel - 1 + nItens) % nItens; redraw(); }
       else if (g == 3) {
-        if (sel == 0) mudar(MENU_PRINCIPAL);          // "< voltar"
+        if (sel == 0) mudar(MENU_PRINCIPAL);          // "< back"
         else {
           abrirArquivo(sel - 1);
           estado = PREVIEW;
@@ -511,13 +512,13 @@ void loop() {
       if (g == 1) { sel = (sel + 1) % nItens; redraw(); }
       else if (g == 2) { sel = (sel - 1 + nItens) % nItens; redraw(); }
       else if (g == 3) {
-        if (sel == 0) {                               // toggle orientation
+        if (sel == 0) {                               // "< back"
+          mudar(MENU_PRINCIPAL);
+        } else {                                      // toggle orientation
           vertical = !vertical;
           aplicarOrientacao();
           salvarConfig();
           redraw();
-        } else {
-          mudar(MENU_PRINCIPAL);
         }
       }
       break;
