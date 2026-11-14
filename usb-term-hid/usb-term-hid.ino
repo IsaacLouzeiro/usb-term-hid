@@ -36,6 +36,8 @@
 #include <Fonts/FreeMono9pt7b.h>
 #include <SPI.h>
 #include <LittleFS.h>
+#include <WiFi.h>
+#include <WebServer.h>
 #include "USB.h"
 #include "USBHIDKeyboard.h"
 
@@ -59,10 +61,16 @@
 
 #define APP_NAME    "USB HID"
 #define APP_AUTHOR  "IsaacLouzeiro"
-#define APP_VERSION "v0.5"
+#define APP_VERSION "v0.6"
+
+// ---------- Wi-Fi config AP ----------
+#define WIFI_SSID "usb-term-hid"
+#define WIFI_PASS "hidsetup123"      // >= 8 chars (WPA2)
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 USBHIDKeyboard keyboard;
+WebServer server(80);
+bool wifiOn = false;
 
 uint16_t C_BG, C_GREEN, C_GREEN2, C_BORDER, C_AMBER, C_CYAN;
 
@@ -86,7 +94,7 @@ int nItems = 0;
 int sel = 0;
 
 // ---------- Screen state ----------
-enum Screen { MAIN_MENU, PAYLOADS, PREVIEW, CONFIG, ABOUT };
+enum Screen { MAIN_MENU, PAYLOADS, PREVIEW, CONFIG, ABOUT, WIFI_SCREEN };
 Screen state = MAIN_MENU;
 
 // ---------- Preview pagination ----------
@@ -333,6 +341,7 @@ void buildItems() {
   } else if (state == CONFIG) {
     items[nItems++] = "< back";
     items[nItems++] = String("Screen [") + (vertical ? "V" : "H") + "]";
+    items[nItems++] = "Wi-Fi";
   }
 }
 
@@ -497,6 +506,159 @@ void drawPreview() {
   drawStatus("[ READY ]", C_GREEN);
 }
 
+// ============================================================
+//  WEB UI (Wi-Fi SoftAP) - edit payload files from a browser
+// ============================================================
+
+String htmlEscape(const String &s) {
+  String o = "";
+  for (unsigned int i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if (c == '&') o += "&amp;";
+    else if (c == '<') o += "&lt;";
+    else if (c == '>') o += "&gt;";
+    else o += c;
+  }
+  return o;
+}
+
+// Keep only a safe file name ending in .txt (never config.txt)
+String sanitizeName(String n) {
+  n.trim();
+  int slash = n.lastIndexOf('/');
+  if (slash >= 0) n = n.substring(slash + 1);
+  String out = "";
+  for (unsigned int i = 0; i < n.length(); i++) {
+    char c = n[i];
+    bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+    if (ok) out += c;
+  }
+  if (out.length() == 0) return "";
+  if (!out.endsWith(".txt")) out += ".txt";
+  if (out == "config.txt") return "";
+  return out;
+}
+
+String htmlHeader(const String &title) {
+  return "<!doctype html><html><head><meta charset=utf-8>"
+         "<meta name=viewport content='width=device-width,initial-scale=1'>"
+         "<title>" + title + "</title><style>"
+         "body{background:#050805;color:#8cffa9;font-family:monospace;margin:0;padding:16px}"
+         "h1,h2{color:#3dff6a}a{color:#4df0ff;text-decoration:none}"
+         "textarea{width:100%;height:50vh;background:#000;color:#8cffa9;"
+         "border:1px solid #1a5a28;font-family:monospace;font-size:14px;padding:8px;box-sizing:border-box}"
+         "input[type=text]{background:#000;color:#8cffa9;border:1px solid #1a5a28;padding:6px;font-family:monospace}"
+         "button,input[type=submit]{background:#1a5a28;color:#3dff6a;border:0;padding:8px 14px;"
+         "font-family:monospace;cursor:pointer}"
+         ".row{display:flex;gap:10px;align-items:center;margin:6px 0;"
+         "padding:4px 0;border-bottom:1px solid #123}.del{color:#ff6a6a}"
+         "</style></head><body>";
+}
+
+void handleRoot() {
+  listFiles();
+  String p = htmlHeader("usb-term-hid");
+  p += "<h1>usb-term-hid</h1><h2>payloads</h2>";
+  for (int i = 0; i < totalFiles; i++) {
+    String n = files[i];
+    p += "<div class=row><span style='flex:1'>" + n + "</span>";
+    p += "<a href='/edit?file=" + n + "'>edit</a>";
+    p += "<a class=del href='/delete?file=" + n + "'>delete</a></div>";
+  }
+  p += "<h2>new file</h2><form action='/edit' method='get'>"
+       "<input type=text name=file placeholder='name.txt'> "
+       "<input type=submit value='create / open'></form>";
+  p += "</body></html>";
+  server.send(200, "text/html", p);
+}
+
+void handleEdit() {
+  String name = sanitizeName(server.arg("file"));
+  if (name == "") { server.sendHeader("Location", "/"); server.send(303, "text/plain", ""); return; }
+  String content = "";
+  File f = LittleFS.open("/" + name, "r");
+  if (f) { while (f.available()) content += (char)f.read(); f.close(); }
+  String p = htmlHeader("edit " + name);
+  p += "<h1>edit " + name + "</h1>";
+  p += "<form action='/save' method='post'>";
+  p += "<input type=hidden name=file value='" + name + "'>";
+  p += "<textarea name=content>" + htmlEscape(content) + "</textarea><br><br>";
+  p += "<button type=submit>save</button> <a href='/'>cancel</a></form>";
+  p += "</body></html>";
+  server.send(200, "text/html", p);
+}
+
+void handleSave() {
+  String name = sanitizeName(server.arg("file"));
+  if (name != "") {
+    File f = LittleFS.open("/" + name, "w");
+    if (f) { f.print(server.arg("content")); f.close(); }
+  }
+  server.sendHeader("Location", "/");
+  server.send(303, "text/plain", "");
+}
+
+void handleDelete() {
+  String name = sanitizeName(server.arg("file"));
+  if (name != "") LittleFS.remove("/" + name);
+  server.sendHeader("Location", "/");
+  server.send(303, "text/plain", "");
+}
+
+void startWifi() {
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(WIFI_SSID, WIFI_PASS);
+  server.on("/", handleRoot);
+  server.on("/edit", handleEdit);
+  server.on("/save", HTTP_POST, handleSave);
+  server.on("/delete", handleDelete);
+  server.begin();
+  wifiOn = true;
+}
+
+void stopWifi() {
+  server.stop();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_OFF);
+  wifiOn = false;
+}
+
+void drawWifi() {
+  int w = W(), h = H();
+  tft.fillScreen(C_BG);
+  tft.setFont();
+  tft.drawRect(4, 4, w - 8, h - 8, C_BORDER);
+
+  tft.setTextSize(1);
+  tft.setTextColor(C_GREEN);
+  tft.setCursor(MARGIN_X, MARGIN_Y);
+  tft.print("esp32@hid:~$ wifi");
+
+  tft.setTextSize(2);
+  tft.setTextColor(C_GREEN);
+  tft.setCursor(MARGIN_X, vertical ? 58 : 38);
+  tft.print(wifiOn ? "Wi-Fi ON" : "Wi-Fi OFF");
+
+  tft.setTextSize(1);
+  tft.setTextColor(C_GREEN2);
+  int dy = vertical ? 16 : 14;
+  int y  = vertical ? 90 : 64;
+  if (wifiOn) {
+    tft.setCursor(MARGIN_X, y); tft.print("SSID: " WIFI_SSID);  y += dy;
+    tft.setCursor(MARGIN_X, y); tft.print("Pass: " WIFI_PASS);  y += dy;
+    tft.setCursor(MARGIN_X, y); tft.print("URL:  192.168.4.1"); y += dy;
+    tft.setCursor(MARGIN_X, y); tft.print("Clients: ");
+    tft.print(WiFi.softAPgetStationNum());
+  } else {
+    tft.setCursor(MARGIN_X, y); tft.print("Turn on to edit"); y += dy;
+    tft.setCursor(MARGIN_X, y); tft.print("payloads from a"); y += dy;
+    tft.setCursor(MARGIN_X, y); tft.print("web browser.");
+  }
+
+  footer(wifiOn ? "hold: turn off" : "hold: turn on", "click: back");
+}
+
 // Draw whatever the current screen is
 void redraw() {
   if (state == MAIN_MENU || state == PAYLOADS || state == CONFIG) buildItems();
@@ -506,12 +668,14 @@ void redraw() {
     case CONFIG:    drawList("esp32@hid:~$ config"); break;
     case ABOUT:     drawAbout();                     break;
     case PREVIEW:   drawPreview();                   break;
+    case WIFI_SCREEN: drawWifi();                    break;
   }
 }
 
 void goTo(int s) {
   state = (Screen)s;
   sel = 0;
+  if (state == PAYLOADS) listFiles();   // reflect web edits
   redraw();
 }
 
@@ -547,6 +711,7 @@ void setup() {
 }
 
 void loop() {
+  if (wifiOn) server.handleClient();
   int g = readButton();
 
   switch (state) {
@@ -579,19 +744,25 @@ void loop() {
       if (g == 1) { sel = (sel + 1) % nItems; redraw(); }
       else if (g == 2) { sel = (sel - 1 + nItems) % nItems; redraw(); }
       else if (g == 3) {
-        if (sel == 0) {                               // "< back"
-          goTo(MAIN_MENU);
-        } else {                                      // toggle orientation
+        if (sel == 0) goTo(MAIN_MENU);                // "< back"
+        else if (sel == 1) {                          // toggle orientation
           vertical = !vertical;
           applyOrientation();
           saveConfig();
           redraw();
+        } else {                                      // Wi-Fi
+          goTo(WIFI_SCREEN);
         }
       }
       break;
 
     case ABOUT:
       if (g != 0) goTo(MAIN_MENU);
+      break;
+
+    case WIFI_SCREEN:
+      if (g == 3) { if (wifiOn) stopWifi(); else startWifi(); drawWifi(); }
+      else if (g == 1 || g == 2) goTo(CONFIG);
       break;
 
     case PREVIEW:
