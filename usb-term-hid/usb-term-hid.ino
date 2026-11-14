@@ -177,6 +177,46 @@ String displayName(int i) {
 //  SCRIPT PARSING / PREVIEW
 // ============================================================
 
+// Fold a Latin-1 accented codepoint to its ASCII base (for the TFT preview only)
+char foldChar(uint16_t cp) {
+  if (cp >= 0xC0 && cp <= 0xC5) return 'A';
+  if (cp == 0xC7)               return 'C';
+  if (cp >= 0xC8 && cp <= 0xCB) return 'E';
+  if (cp >= 0xCC && cp <= 0xCF) return 'I';
+  if (cp == 0xD1)               return 'N';
+  if (cp >= 0xD2 && cp <= 0xD6) return 'O';
+  if (cp >= 0xD9 && cp <= 0xDC) return 'U';
+  if (cp >= 0xE0 && cp <= 0xE5) return 'a';
+  if (cp == 0xE7)               return 'c';
+  if (cp >= 0xE8 && cp <= 0xEB) return 'e';
+  if (cp >= 0xEC && cp <= 0xEF) return 'i';
+  if (cp == 0xF1)               return 'n';
+  if (cp >= 0xF2 && cp <= 0xF6) return 'o';
+  if (cp >= 0xF9 && cp <= 0xFC) return 'u';
+  return '?';
+}
+
+// The terminal font has no accent glyphs, so normalize UTF-8 text to ASCII
+// for display. Typing uses the original bytes, so accents still go out right.
+String foldAscii(const String &s) {
+  String o = "";
+  for (unsigned int i = 0; i < s.length(); i++) {
+    uint8_t c = (uint8_t)s[i];
+    if (c == 0xC3 && i + 1 < s.length()) {
+      o += foldChar(0xC0 | ((uint8_t)s[i + 1] & 0x3F));
+      i++;
+    } else if (c == 0xC2 && i + 1 < s.length()) {
+      o += '?';
+      i++;
+    } else if (c < 0x80) {
+      o += (char)c;
+    } else {
+      o += '?';
+    }
+  }
+  return o;
+}
+
 String buildPreview(const char* text) {
   String preview = "", line = "";
   for (int i = 0; ; i++) {
@@ -191,7 +231,7 @@ String buildPreview(const char* text) {
       if (c == '\0') break;
     } else line += c;
   }
-  return preview;
+  return foldAscii(preview);
 }
 
 void wrapLines(const String &txt, int maxChars) {
