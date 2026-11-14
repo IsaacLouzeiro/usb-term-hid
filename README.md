@@ -90,7 +90,7 @@ The `< back` entry is always the first item (at the top) of every list.
 
 ## How to use
 
-1. Open `esp32-usb-hid/esp32-usb-hid.ino` in the Arduino IDE.
+1. Open `usb-term-hid/usb-term-hid.ino` in the Arduino IDE.
 2. Set the `Tools` options above and flash the board.
 3. In the main menu, open **Payloads** and pick a file with **BOOT**
    (click/double to move, hold to open).
