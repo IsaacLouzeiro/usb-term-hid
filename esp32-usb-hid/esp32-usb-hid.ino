@@ -362,7 +362,7 @@ void drawAbout() {
 
 void drawPage(int p) {
   int w = W();
-  int plBottom = vertical ? 248 : 102;
+  int plBottom = H() - 56;            // leave room for divider + hint + status
   tft.fillRect(6, 26, w - 12, plBottom - 26, C_BG);
 
   tft.setFont();
@@ -392,8 +392,8 @@ void drawPage(int p) {
 
 void drawStatus(const char* text, uint16_t color) {
   int w = W();
-  int sy = vertical ? 290 : 138;
-  tft.fillRect(6, sy - 4, w - 12, 26, C_BG);
+  int sy = H() - 24;                  // bottom-most line, just inside the frame
+  tft.fillRect(6, sy - 6, w - 12, 24, C_BG);
   tft.setFont();
   tft.setTextSize(2);
   tft.setTextColor(color);
@@ -425,7 +425,14 @@ void drawPreview() {
   tft.print("cat ");
   tft.print(displayName(currentFile));
 
-  footer("click:back", "hold:send");
+  // Bottom chrome: divider, single hint line, then the status line below it
+  int divY = H() - 52;
+  tft.drawFastHLine(MARGIN_X, divY, W() - 2 * MARGIN_X, C_BORDER);
+  tft.setTextSize(1);
+  tft.setTextColor(C_GREEN);
+  tft.setCursor(MARGIN_X, divY + 6);
+  tft.print("click:back   hold:send");
+
   drawPage(currentPage);
   drawStatus("[ READY ]", C_GREEN);
 }
