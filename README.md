@@ -67,14 +67,36 @@ To use your own scripts, place `.txt` files in the LittleFS root (with the
 
 Each file has one command per line:
 
-| Command       | What it does                      |
-|---------------|-----------------------------------|
-| `STRING text` | types the text                    |
-| `ENTER`       | Enter key                         |
-| `TAB`         | Tab key                           |
-| `DELAY 500`   | waits 500 ms                      |
-| `GUI r`       | Windows/Cmd + r                   |
-| `# ...`       | comment (ignored)                 |
+| Command            | What it does                                   |
+|--------------------|------------------------------------------------|
+| `STRING text`      | types the text                                 |
+| `DELAY 500`        | waits 500 ms                                   |
+| `ENTER` `TAB` `ESC` `SPACE` `BACKSPACE` `DELETE` `INSERT` | single keys |
+| `UP` `DOWN` `LEFT` `RIGHT` `HOME` `END` `PAGEUP` `PAGEDOWN` | navigation keys |
+| `F1` … `F12`       | function keys                                  |
+| `CTRL` `ALT` `SHIFT` `GUI` `+ key` | shortcut combo (see below)     |
+| `# ...`            | comment (ignored)                              |
+
+Combos put the modifiers and the final key on one line:
+
+```
+GUI r              # Windows Run dialog / macOS has no direct equivalent
+CTRL c             # copy
+CTRL ALT t         # open a terminal on most Linux desktops
+CTRL SHIFT ESC     # Task Manager on Windows
+```
+
+`GUI` is the Windows key on Windows, Cmd on macOS and Super on Linux.
+
+### Cross-OS notes
+
+- The keyboard is driverless, so it enumerates the same on Windows, macOS and Linux.
+- **Shortcuts differ per OS** — write OS-specific scripts (e.g. `win.txt`,
+  `mac.txt`, `linux.txt`). Modifiers and function keys are layout-independent.
+- **Keyboard layout matters only for `STRING`.** HID sends key *positions*, and
+  the target OS maps them using its own layout (US is assumed here). Letters and
+  digits are always correct; symbols/accents may differ on non-US layouts
+  (ABNT2, German, etc.).
 
 ## BOOT button navigation
 
@@ -102,5 +124,7 @@ The `< back` entry is always the first item (at the top) of every list.
 - [x] Load scripts from files in internal flash (LittleFS)
 - [x] On-screen menu navigated by the BOOT button
 - [x] Config menu (screen orientation)
+- [x] Shortcut commands (CTRL/ALT/SHIFT/GUI combos, function and navigation keys)
 - [ ] Upload payloads over Wi-Fi from a web page
+- [ ] Keyboard layout remapping for `STRING` (e.g. ABNT2)
 - [ ] USB mass-storage mode to drag-and-drop scripts

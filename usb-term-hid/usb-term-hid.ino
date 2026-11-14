@@ -15,7 +15,14 @@
 //     about    any press = back
 //
 //  Script commands (one per line):
-//     STRING <text> / ENTER / TAB / DELAY <ms> / GUI <key> / #comment
+//     STRING <text>     type the text
+//     DELAY <ms>        wait
+//     ENTER TAB ESC SPACE BACKSPACE DELETE INSERT   single keys
+//     UP DOWN LEFT RIGHT HOME END PAGEUP PAGEDOWN    navigation
+//     F1..F12           function keys
+//     CTRL/ALT/SHIFT/GUI [+ key]   shortcut, e.g. "CTRL c", "CTRL ALT t", "GUI r"
+//     #comment          ignored
+//  (GUI = Windows key / Cmd on macOS / Super on Linux)
 //
 //  Arduino IDE options (Tools):
 //     USB Mode        = "USB-OTG (TinyUSB)"
@@ -200,23 +207,72 @@ void openFile(int i) {
   currentPage = 0;
 }
 
+// Modifier key for a token, or 0
+uint8_t modifierFor(const String &t) {
+  if (t == "CTRL" || t == "CONTROL") return KEY_LEFT_CTRL;
+  if (t == "ALT")                    return KEY_LEFT_ALT;
+  if (t == "SHIFT")                  return KEY_LEFT_SHIFT;
+  if (t == "GUI" || t == "WIN" || t == "CMD" || t == "META") return KEY_LEFT_GUI;
+  return 0;
+}
+
+// HID code for a named key (uppercase token), or 0
+uint8_t namedKey(const String &t) {
+  if (t == "ENTER" || t == "RETURN")   return KEY_RETURN;
+  if (t == "TAB")                      return KEY_TAB;
+  if (t == "ESC" || t == "ESCAPE")     return KEY_ESC;
+  if (t == "SPACE")                    return ' ';
+  if (t == "BACKSPACE" || t == "BKSP") return KEY_BACKSPACE;
+  if (t == "DELETE" || t == "DEL")     return KEY_DELETE;
+  if (t == "INSERT" || t == "INS")     return KEY_INSERT;
+  if (t == "UP")    return KEY_UP_ARROW;
+  if (t == "DOWN")  return KEY_DOWN_ARROW;
+  if (t == "LEFT")  return KEY_LEFT_ARROW;
+  if (t == "RIGHT") return KEY_RIGHT_ARROW;
+  if (t == "HOME")  return KEY_HOME;
+  if (t == "END")   return KEY_END;
+  if (t == "PAGEUP"   || t == "PGUP") return KEY_PAGE_UP;
+  if (t == "PAGEDOWN" || t == "PGDN") return KEY_PAGE_DOWN;
+  if (t == "CAPS" || t == "CAPSLOCK") return KEY_CAPS_LOCK;
+  if (t.length() >= 2 && t[0] == 'F') {
+    int n = t.substring(1).toInt();
+    if (n >= 1 && n <= 12) return KEY_F1 + (n - 1);
+  }
+  return 0;
+}
+
+// Press one token: modifier, named key or single character. Returns true if handled.
+bool pressToken(const String &raw) {
+  String t = raw; t.toUpperCase();
+  uint8_t m = modifierFor(t); if (m) { keyboard.press(m); return true; }
+  uint8_t k = namedKey(t);    if (k) { keyboard.press(k); return true; }
+  if (raw.length() == 1) { keyboard.press(raw[0]); return true; }
+  return false;
+}
+
 void runLine(String line) {
   line.trim();
   if (line.length() == 0 || line.startsWith("#")) return;
+
   int sp = line.indexOf(' ');
   String cmd = (sp == -1) ? line : line.substring(0, sp);
   String arg = (sp == -1) ? ""   : line.substring(sp + 1);
-  cmd.toUpperCase();
-  if (cmd == "STRING")      keyboard.print(arg);
-  else if (cmd == "ENTER")  keyboard.write(KEY_RETURN);
-  else if (cmd == "TAB")    keyboard.write(KEY_TAB);
-  else if (cmd == "DELAY")  delay(arg.toInt());
-  else if (cmd == "GUI") {
-    keyboard.press(KEY_LEFT_GUI);
-    if (arg.length() > 0) keyboard.press(arg[0]);
-    delay(100);
-    keyboard.releaseAll();
+  String up = cmd; up.toUpperCase();
+
+  if (up == "STRING") { keyboard.print(arg); return; }
+  if (up == "DELAY")  { delay(arg.toInt()); return; }
+
+  // Otherwise it is a key or a combo: press each token, then release all.
+  // Examples: ENTER / TAB / ESC / F5 / UP / "CTRL c" / "CTRL ALT t" / "GUI r"
+  String tok = "";
+  String rest = line + " ";
+  for (unsigned int i = 0; i < rest.length(); i++) {
+    char c = rest[i];
+    if (c == ' ') { if (tok.length()) { pressToken(tok); tok = ""; } }
+    else tok += c;
   }
+  delay(10);
+  keyboard.releaseAll();
 }
 
 void runScript(const char* text) {
