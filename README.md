@@ -1,101 +1,106 @@
-# ESP32-S3 USB HID + Tela ST7789
+# ESP32-S3 USB HID + ST7789 Display
 
-Projeto de estudo: um **ESP32-S3** que se conecta ao computador pela porta
-USB nativa e se passa por um **teclado** (USB HID). Os scripts ficam em
-**arquivos** na memória interna (LittleFS) e são escolhidos por um **menu na
-tela**, navegado só pelo botão **BOOT**. Uma tela **TFT ST7789 de 1.9"** mostra
-o menu, a prévia do texto (com paginação automática) e o estado atual.
+Study project: an **ESP32-S3** that connects to a computer over the native USB
+port and acts as a **keyboard** (USB HID). Scripts are stored as **files** in the
+internal flash (LittleFS) and chosen from an **on-screen menu** navigated with a
+single button (**BOOT**). A **1.9" ST7789 TFT** shows the menu, a preview of the
+text (with automatic pagination) and the current status.
 
-> ⚠️ **Uso educacional.** Teste apenas em computadores seus ou com autorização.
-> A emulação de teclado via USB deve ser usada de forma responsável.
+> ⚠️ **Educational use.** Only test on computers you own or are authorized to use.
+> USB keyboard emulation must be used responsibly.
 
 ## Hardware
 
-- ESP32-S3 (com USB nativo)
-- Tela TFT ST7789 1.9" — 170×320, interface SPI
+- ESP32-S3 (with native USB)
+- ST7789 1.9" TFT — 170×320, SPI interface
 
-### Ligação
+### Wiring
 
-| Tela | ESP32-S3 | Função          |
-|------|----------|-----------------|
-| VCC  | 3V3      | Alimentação     |
-| GND  | GND      | Terra           |
-| SCL  | GPIO 12  | Clock SPI (SCK) |
-| SDA  | GPIO 11  | Dados SPI (MOSI)|
-| CS   | GPIO 10  | Chip Select     |
-| DC   | GPIO 9   | Dado/Comando    |
-| RES  | GPIO 8   | Reset           |
-| BLK  | GPIO 7   | Luz de fundo    |
+| Display | ESP32-S3 | Function        |
+|---------|----------|-----------------|
+| VCC     | 3V3      | Power           |
+| GND     | GND      | Ground          |
+| SCL     | GPIO 12  | SPI clock (SCK) |
+| SDA     | GPIO 11  | SPI data (MOSI) |
+| CS      | GPIO 10  | Chip select     |
+| DC      | GPIO 9   | Data/command    |
+| RES     | GPIO 8   | Reset           |
+| BLK     | GPIO 7   | Backlight       |
 
-O botão de disparo é o **BOOT** da própria placa (GPIO 0).
+The trigger button is the board's own **BOOT** button (GPIO 0).
 
 ## Software
 
-### Dependências
+### Dependencies
 
 - [ESP32 Arduino core](https://github.com/espressif/arduino-esp32) (3.x)
 - Adafruit ST7735 and ST7789 Library
 - Adafruit GFX Library
 
-### Configuração no Arduino IDE (menu Tools)
+### Arduino IDE settings (Tools menu)
 
 - **Board:** ESP32S3 Dev Module
 - **USB Mode:** `USB-OTG (TinyUSB)`
 - **USB CDC On Boot:** `Enabled`
 
-Grave pela porta UART e conecte o cabo também na porta USB nativa, que é por
-onde a placa vira teclado.
+Flash through the UART port and also connect the cable to the native USB port,
+which is where the board acts as a keyboard.
 
-## Scripts em arquivos (LittleFS)
+## On-screen menu
 
-Os scripts ficam em arquivos `.txt` na memória interna da placa. No **primeiro
-boot**, se não houver nenhum, a placa cria dois exemplos (`payload1.txt` e
-`payload2.txt`) automaticamente — então funciona sem ferramenta de upload.
+A single sketch with a main menu navigated by the BOOT button:
 
-Para usar seus próprios scripts, coloque arquivos `.txt` na raiz do LittleFS
-(pela ferramenta "LittleFS Data Upload" ou, mais pra frente, por Wi-Fi).
+- **Payloads** — lists the script files; opening one shows the preview and lets
+  you send it.
+- **Config** — device settings. Today: **screen orientation**
+  (`Screen [H]` / `Screen [V]`), switched live and saved to `/config.txt`.
+- **About** — program name, author and version.
 
-Cada arquivo tem um comando por linha:
+## Scripts in files (LittleFS)
 
-| Comando        | O que faz                          |
-|----------------|------------------------------------|
-| `STRING texto` | digita o texto                     |
-| `ENTER`        | tecla Enter                        |
-| `TAB`          | tecla Tab                          |
-| `DELAY 500`    | espera 500 ms                      |
-| `GUI r`        | tecla Windows/Cmd + r              |
-| `# ...`        | comentário (ignorado)              |
+Scripts are `.txt` files in the board's internal flash. On the **first boot**,
+if none exist, the board creates two examples (`payload1.txt` and
+`payload2.txt`) automatically — so it works without any upload tool.
 
-## Navegação pelo botão BOOT
+To use your own scripts, place `.txt` files in the LittleFS root (with the
+"LittleFS Data Upload" tool or, later, over Wi-Fi).
 
-Um único botão controla tudo, pelo tempo e número de toques:
+Each file has one command per line:
 
-| Tela      | Clique        | Duplo clique   | Segurar (~0,7s) |
-|-----------|---------------|----------------|-----------------|
-| Menu      | próximo arquivo | arquivo anterior | abrir o selecionado |
-| Prévia    | voltar ao menu  | voltar ao menu   | enviar (digitar) |
+| Command       | What it does                      |
+|---------------|-----------------------------------|
+| `STRING text` | types the text                    |
+| `ENTER`       | Enter key                         |
+| `TAB`         | Tab key                           |
+| `DELAY 500`   | waits 500 ms                      |
+| `GUI r`       | Windows/Cmd + r                   |
+| `# ...`       | comment (ignored)                 |
 
-## Menu na tela
+## BOOT button navigation
 
-Um único sketch, com um menu principal navegado pelo BOOT:
+A single button controls everything, by press duration and count:
 
-- **Payloads** — lista os arquivos de script; abrir mostra a prévia e permite enviar.
-- **Config** — ajustes do dispositivo. Hoje: **orientação da tela**
-  (horizontal/vertical), trocada na hora e salva em `/config.txt`.
-- **About** — nome do programa, autor e versão.
+| Screen   | Click         | Double click    | Hold (~0.7s)       |
+|----------|---------------|-----------------|--------------------|
+| List     | next item     | previous item   | select             |
+| Preview  | back to list  | back to list    | send (type script) |
+| About    | back          | back            | back               |
 
-## Como usar
+The `< back` entry is always the first item (at the top) of every list.
 
-1. Abra `esp32-usb-hid/esp32-usb-hid.ino` no Arduino IDE.
-2. Ajuste as opções de `Tools` acima e grave na placa.
-3. No menu principal, entre em **Payloads** e escolha um arquivo com o **BOOT**
-   (clique/duplo navegam, segurar abre).
-4. Na prévia, clique num editor de texto no PC e **segure o BOOT** para enviar.
-5. A orientação da tela fica em **Config → Tela**.
+## How to use
 
-## Próximos passos
+1. Open `esp32-usb-hid/esp32-usb-hid.ino` in the Arduino IDE.
+2. Set the `Tools` options above and flash the board.
+3. In the main menu, open **Payloads** and pick a file with **BOOT**
+   (click/double to move, hold to open).
+4. In the preview, click into a text editor on the PC and **hold BOOT** to send.
+5. Screen orientation lives in **Config → Screen**.
 
-- [x] Carregar scripts de arquivos na memória interna (LittleFS)
-- [x] Menu na tela navegado pelo botão BOOT
-- [ ] Enviar arquivos pelo Wi-Fi via página web
-- [ ] Modo pen drive (USB MSC) para arrastar scripts
+## Roadmap
+
+- [x] Load scripts from files in internal flash (LittleFS)
+- [x] On-screen menu navigated by the BOOT button
+- [x] Config menu (screen orientation)
+- [ ] Upload payloads over Wi-Fi from a web page
+- [ ] USB mass-storage mode to drag-and-drop scripts
