@@ -818,6 +818,67 @@ void drawWifi() {
   footer(wifiOn ? "hold: turn off" : "hold: turn on", "click: back");
 }
 
+// ============================================================
+//  BOOT SPLASH - an original boar dashing across the screen
+// ============================================================
+
+// Draw a simple boar silhouette facing right at (x,y). step animates the legs.
+void drawBoar(int x, int y, int step) {
+  // body
+  tft.fillRoundRect(x, y, 44, 22, 7, C_GREEN);
+  // head
+  tft.fillRoundRect(x + 36, y + 4, 18, 16, 4, C_GREEN);
+  // snout
+  tft.fillRect(x + 52, y + 9, 6, 7, C_GREEN2);
+  // ear
+  tft.fillTriangle(x + 40, y + 4, x + 46, y - 5, x + 50, y + 4, C_GREEN);
+  // tusk
+  tft.fillTriangle(x + 54, y + 16, x + 59, y + 13, x + 56, y + 20, C_GREEN2);
+  // tail
+  tft.drawLine(x, y + 6, x - 6, y + 1, C_GREEN);
+  // legs (alternate for a running feel)
+  int o = (step % 2) ? 5 : 0;
+  tft.fillRect(x + 7,  y + 22, 4, 8 + o,       C_GREEN);
+  tft.fillRect(x + 15, y + 22, 4, 8 + (5 - o), C_GREEN);
+  tft.fillRect(x + 28, y + 22, 4, 8 + o,       C_GREEN);
+  tft.fillRect(x + 36, y + 22, 4, 8 + (5 - o), C_GREEN);
+  // snort puffs in front of the snout
+  tft.drawCircle(x + 64, y + 6, 3 + (step % 3), C_GREEN2);
+  tft.drawCircle(x + 71, y + 2, 2 + (step % 2), C_GREEN2);
+}
+
+void bootSplash() {
+  int w = W(), h = H();
+  int y = h / 2 + 4;
+  int titleW = 7 * 12;              // "USB HID" at text size 2
+
+  for (int x = -72; x < w + 12; x += 10) {
+    tft.fillScreen(C_BG);
+    tft.setFont();
+    tft.setTextSize(2);
+    tft.setTextColor(C_GREEN);
+    tft.setCursor((w - titleW) / 2, h / 2 - 30);
+    tft.print("USB HID");
+    // speed lines trailing the boar
+    for (int k = 0; k < 3; k++)
+      tft.drawFastHLine(x - 22 - k * 10, y + 4 + k * 6, 16, C_BORDER);
+    drawBoar(x, y, x / 10);
+    delay(32);
+  }
+
+  // short hold with title + subtitle
+  tft.fillScreen(C_BG);
+  tft.setTextSize(2);
+  tft.setTextColor(C_GREEN);
+  tft.setCursor((w - titleW) / 2, h / 2 - 16);
+  tft.print("USB HID");
+  tft.setTextSize(1);
+  tft.setTextColor(C_GREEN2);
+  tft.setCursor((w - 10 * 6) / 2, h / 2 + 8);
+  tft.print("loading...");
+  delay(700);
+}
+
 // Draw whatever the current screen is
 void redraw() {
   if (state == MAIN_MENU || state == PAYLOADS || state == CONFIG) buildItems();
@@ -863,6 +924,7 @@ void setup() {
   listFiles();
   if (totalFiles == 0) { seedDefaults(); listFiles(); }
 
+  bootSplash();
   goTo(MAIN_MENU);
 
   keyboard.begin();
