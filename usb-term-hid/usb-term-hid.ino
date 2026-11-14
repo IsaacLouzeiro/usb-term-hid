@@ -397,8 +397,8 @@ void buildItems() {
     for (int i = 0; i < totalFiles; i++) items[nItems++] = displayName(i);
   } else if (state == CONFIG) {
     items[nItems++] = "< back";
-    items[nItems++] = String("Screen [") + (vertical ? "V" : "H") + "]";
-    items[nItems++] = String("Layout [") + (layoutBR ? "B" : "U") + "]";
+    items[nItems++] = String("Screen: ") + (vertical ? "Vertical" : "Horizontal");
+    items[nItems++] = String("Layout: ") + (layoutBR ? "ABNT2" : "US");
     items[nItems++] = "Wi-Fi";
   }
 }
@@ -430,18 +430,21 @@ void drawList(const char* title) {
   tft.setCursor(MARGIN_X, MARGIN_Y);
   tft.print(title);
 
+  // Config uses a smaller font so the full labels fit in both orientations
+  int itemSize = (state == CONFIG) ? 1 : 2;
   int startY = vertical ? 44 : 36;
-  int lineH  = vertical ? 28 : 24;
+  int lineH  = (itemSize == 2) ? (vertical ? 28 : 24) : 20;
+  int barH   = (itemSize == 2) ? (lineH - 4) : 14;
   int divY   = h - 46;
   int maxVis = (divY - startY) / lineH;
   if (maxVis < 1) maxVis = 1;
   int first = (sel >= maxVis) ? (sel - maxVis + 1) : 0;
 
-  tft.setTextSize(2);
+  tft.setTextSize(itemSize);
   int y = startY;
   for (int i = first; i < nItems && i < first + maxVis; i++) {
     if (i == sel) {
-      tft.fillRect(6, y - 2, w - 12, lineH - 4, C_BORDER);
+      tft.fillRect(6, y - 2, w - 12, barH, C_BORDER);
       tft.setTextColor(C_GREEN);
     } else {
       tft.setTextColor(C_GREEN2);
