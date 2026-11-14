@@ -110,6 +110,22 @@ A single button controls everything, by press duration and count:
 
 The `< back` entry is always the first item (at the top) of every list.
 
+## Wi-Fi payload editor
+
+The board can bring up its own Wi-Fi access point with a small web page to
+**list, create, edit and delete** the `.txt` payloads — no upload tool needed.
+
+1. On the device: **Config → Wi-Fi**, then **hold BOOT** to turn it on.
+2. On your phone/PC, connect to the Wi-Fi network:
+   - SSID: `usb-term-hid`
+   - Password: `hidsetup123`
+3. Open `http://192.168.4.1` in a browser.
+4. Edit/create/delete files, then **hold BOOT** again to turn Wi-Fi off.
+
+> Change `WIFI_SSID` / `WIFI_PASS` in the sketch before real use, and keep Wi-Fi
+> off when you are not editing — it is a configuration access point, not meant
+> to stay on.
+
 ## How to use
 
 1. Open `usb-term-hid/usb-term-hid.ino` in the Arduino IDE.
@@ -125,6 +141,6 @@ The `< back` entry is always the first item (at the top) of every list.
 - [x] On-screen menu navigated by the BOOT button
 - [x] Config menu (screen orientation)
 - [x] Shortcut commands (CTRL/ALT/SHIFT/GUI combos, function and navigation keys)
-- [ ] Upload payloads over Wi-Fi from a web page
+- [x] Wi-Fi access point with a web page to edit payloads
 - [ ] Keyboard layout remapping for `STRING` (e.g. ABNT2)
 - [ ] USB mass-storage mode to drag-and-drop scripts
