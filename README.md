@@ -52,8 +52,10 @@ A single sketch with a main menu navigated by the BOOT button:
 
 - **Payloads** — lists the script files; opening one shows the preview and lets
   you send it.
-- **Config** — device settings. Today: **screen orientation**
-  (`Screen [H]` / `Screen [V]`), switched live and saved to `/config.txt`.
+- **Config** — device settings, saved to `/config.txt`:
+  - **Screen** — orientation `[H]` horizontal / `[V]` vertical, switched live.
+  - **Layout** — keyboard layout for `STRING`: `[U]` US / `[B]` ABNT2 (Brazil).
+  - **Wi-Fi** — the payload web editor (see below).
 - **About** — program name, author and version.
 
 ## Scripts in files (LittleFS)
@@ -94,9 +96,12 @@ CTRL SHIFT ESC     # Task Manager on Windows
 - **Shortcuts differ per OS** — write OS-specific scripts (e.g. `win.txt`,
   `mac.txt`, `linux.txt`). Modifiers and function keys are layout-independent.
 - **Keyboard layout matters only for `STRING`.** HID sends key *positions*, and
-  the target OS maps them using its own layout (US is assumed here). Letters and
-  digits are always correct; symbols/accents may differ on non-US layouts
-  (ABNT2, German, etc.).
+  the target OS maps them using its own layout. Pick it in **Config → Layout**:
+  - `US` — default; assumes the target PC uses a US layout.
+  - `ABNT2` — remaps the ASCII punctuation (`/ ? ; : ' " [ ] { } \ |`) to the
+    Brazilian layout so paths and symbols come out right.
+  - Letters and digits are always correct. Accents and `ç` are not handled yet
+    (they need UTF-8 input) — planned.
 
 ## BOOT button navigation
 
@@ -142,5 +147,6 @@ The board can bring up its own Wi-Fi access point with a small web page to
 - [x] Config menu (screen orientation)
 - [x] Shortcut commands (CTRL/ALT/SHIFT/GUI combos, function and navigation keys)
 - [x] Wi-Fi access point with a web page to edit payloads
-- [ ] Keyboard layout remapping for `STRING` (e.g. ABNT2)
+- [x] Keyboard layout option for `STRING` punctuation (US / ABNT2)
+- [ ] Full ABNT2 support including accents and `ç` (UTF-8)
 - [ ] USB mass-storage mode to drag-and-drop scripts
